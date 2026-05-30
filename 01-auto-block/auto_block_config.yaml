@@ -1,0 +1,19 @@
+# Agent configuration for auto-block responses
+threshold: 5
+window_seconds: 60
+
+# IPs the agent should never propose blocking
+allowlist:
+  - 127.0.0.1
+  - 10.0.0.0/8
+
+# How long the block should last before auto-expiry
+expire_seconds: 3600
+
+# Git settings for the PR
+git:
+  remote: origin
+  base_branch: main
+  branch_prefix: "riposte/block"
+  reviewers:
+    - security-team

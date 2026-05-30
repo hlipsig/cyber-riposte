@@ -1,0 +1,16 @@
+[Unit]
+Description=Canary token file watcher
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/cyber-riposte/04-canary-tokens/canary_watcher.py
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=/opt/cyber-riposte/04-canary-tokens
+
+ProtectSystem=strict
+ReadOnlyPaths=/
+
+[Install]
+WantedBy=multi-user.target

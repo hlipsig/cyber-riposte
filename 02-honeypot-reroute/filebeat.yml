@@ -1,0 +1,20 @@
+# Ship honeypot logs to your SIEM / Elasticsearch
+filebeat.inputs:
+  - type: log
+    paths:
+      - /var/log/cowrie/*.json
+    json.keys_under_root: true
+    fields:
+      source: cowrie-honeypot
+    fields_under_root: true
+
+  - type: log
+    paths:
+      - /var/log/glastopf/*.log
+    fields:
+      source: http-honeypot
+    fields_under_root: true
+
+output.elasticsearch:
+  hosts: ["https://siem.internal:9200"]
+  index: "honeypot-logs-%{+yyyy.MM.dd}"

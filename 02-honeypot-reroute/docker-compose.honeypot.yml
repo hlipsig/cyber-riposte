@@ -1,0 +1,34 @@
+# Honeypot stack — deployed on the honeypot host (e.g. 10.0.0.99)
+# The agent's DNAT rules redirect attacker traffic here.
+
+services:
+  cowrie:
+    image: cowrie/cowrie:latest
+    ports:
+      - "2222:2222"
+    volumes:
+      - cowrie-logs:/cowrie/var/log/cowrie
+    restart: unless-stopped
+
+  http-honeypot:
+    image: mushorg/glastopf:latest
+    ports:
+      - "8080:80"
+    volumes:
+      - glastopf-logs:/opt/glastopf/log
+    restart: unless-stopped
+
+  filebeat:
+    image: elastic/filebeat:8.12.0
+    volumes:
+      - cowrie-logs:/var/log/cowrie:ro
+      - glastopf-logs:/var/log/glastopf:ro
+      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+    depends_on:
+      - cowrie
+      - http-honeypot
+    restart: unless-stopped
+
+volumes:
+  cowrie-logs:
+  glastopf-logs:

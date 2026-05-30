@@ -1,0 +1,7 @@
+[default]
+aws_access_key_id = AKIAIOSFODNN7CANARY1
+aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYCANARYKEY1
+
+[prod-admin]
+aws_access_key_id = AKIAIOSFODNN7CANARY2
+aws_secret_access_key = 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

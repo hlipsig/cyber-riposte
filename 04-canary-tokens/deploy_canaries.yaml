@@ -1,0 +1,21 @@
+# Canary deployment config — where to plant tripwire files
+# The agent can PR additions to this list to expand coverage after a trigger.
+
+alert_webhook: https://hooks.slack.com/services/YOUR/WEBHOOK/HERE
+
+canaries:
+  - path: /opt/backup/db_credentials.csv
+    description: Fake database credentials
+    template: canaries/fake_db_creds.csv
+
+  - path: /home/admin/.aws/credentials
+    description: Fake AWS credentials (will trigger GuardDuty if used)
+    template: canaries/fake_aws_creds
+
+  - path: /var/www/.env.production
+    description: Fake production environment file
+    template: canaries/fake_env
+
+  - path: /root/.ssh/id_rsa_backup
+    description: Fake SSH private key
+    template: canaries/fake_ssh_key

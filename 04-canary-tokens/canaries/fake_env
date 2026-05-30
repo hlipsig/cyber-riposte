@@ -1,0 +1,5 @@
+DATABASE_URL=postgresql://admin:C4nary-DB-P4ssw0rd@prod-db.internal:5432/app
+REDIS_URL=redis://:F4ke-R3dis-T0ken@cache.internal:6379
+SECRET_KEY=canary-s3cret-k3y-do-not-use-in-production
+STRIPE_SECRET_KEY=sk_live_canary_not_real_key_12345
+API_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.canary-token

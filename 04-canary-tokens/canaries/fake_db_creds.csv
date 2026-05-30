@@ -1,0 +1,4 @@
+host,username,password,database,port
+prod-db-01.internal,app_svc,Th1s-Is-A-Can4ry-Not-R3al,customers,5432
+prod-db-02.internal,analytics_ro,An0ther-F4ke-Cr3dential,metrics,5432
+replica-db.internal,replication,C4nary-Tr1pwire-Cr3d,customers,5432
