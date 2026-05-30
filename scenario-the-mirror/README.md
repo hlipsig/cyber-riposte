@@ -145,6 +145,8 @@ Honeypot ◀──────────┼───────────�
 scenario-the-mirror/
 ├── TALK.md                         # 5-minute talk script with fencing metaphor
 ├── README.md                       # This file — full implementation guide
+├── DEPLOYMENT.md                   # How to deploy: systemd, permissions, input, flow
+├── PHASE2-LLM.md                   # Phase 2: adding an LLM to the decision layer
 ├── mirror_agent.py                 # Main agent orchestrator (autonomous mode)
 ├── action-pool.yaml                # Pre-approved actions the agent can execute
 ├── audit-log-schema.json           # Schema for structured audit trail
@@ -168,6 +170,11 @@ scenario-the-mirror/
     ├── example-postmortem.md       # What a post-mortem report looks like
     └── example-audit-log.json      # What the audit trail looks like
 ```
+
+## Deployment & Implementation
+
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** — How to run the agent: systemd service, permissions model, input sources, and the step-by-step flow from telemetry event to autonomous response.
+- **[PHASE2-LLM.md](PHASE2-LLM.md)** — How adding an LLM to the decision layer improves novel pattern recognition, weak signal correlation, natural language audit trails, and adaptive confidence scoring — without changing the action pool or permission boundaries.
 
 ## Legal & Ethical Notes
 
