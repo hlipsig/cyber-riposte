@@ -1,0 +1,68 @@
+{
+  "description": "Schema for the agent's structured audit trail. Every autonomous action produces one entry.",
+  "audit_entry": {
+    "id": {
+      "type": "string",
+      "description": "Unique ID for this audit entry (UUID)"
+    },
+    "incident_id": {
+      "type": "string",
+      "description": "Groups related entries for a single incident (e.g., one attacker session)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "ISO8601",
+      "description": "When the action was taken"
+    },
+    "action": {
+      "type": "object",
+      "properties": {
+        "id": "string — references action-pool.yaml action ID",
+        "name": "string — human-readable action name",
+        "tier": "integer — 1, 2, or 3",
+        "parameters": {
+          "type": "object",
+          "description": "Action-specific parameters (IP, rule content, etc.)"
+        },
+        "result": {
+          "type": "string",
+          "enum": ["success", "failed", "skipped", "expired"],
+          "description": "Outcome of the action"
+        },
+        "error": {
+          "type": "string",
+          "description": "Error message if result is 'failed'"
+        },
+        "rollback_handle": {
+          "type": "string",
+          "description": "Identifier to undo this action (e.g., nftables rule handle)"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "ISO8601",
+          "description": "When this action auto-expires"
+        }
+      }
+    },
+    "justification": {
+      "type": "object",
+      "properties": {
+        "trigger": "string — what telemetry signal triggered this action",
+        "detection_confidence": "number — 0.0 to 1.0",
+        "evidence_refs": "array of string — references to supporting data (log lines, alert IDs)",
+        "playbook_rule": "string — which action-pool entry authorized this",
+        "reasoning": "string — agent's explanation of why this action was chosen"
+      }
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "attacker_ip": "string",
+        "target_host": "string",
+        "related_entries": "array of string — other audit entry IDs in this incident",
+        "osint_collected": "boolean",
+        "honeypot_active": "boolean"
+      }
+    }
+  }
+}

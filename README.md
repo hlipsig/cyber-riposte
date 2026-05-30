@@ -72,4 +72,8 @@ See [TALK.md](scenario-the-mirror/TALK.md) for the 5-minute presentation version
 
 ## Disclaimer
 
-For authorized defensive use, security research, and educational purposes only.
+This repository is a **collection of ideas** developed for the *Cyber Riposte* presentation. The techniques and countermeasures described here are largely for **entertainment and educational purposes** — they are meant to spark discussion about what AI-driven defensive security could look like, not to serve as production-ready implementations.
+
+**Do not implement any of these techniques without a thorough review by your organization's legal, compliance, and security teams.** Active defense measures — particularly those involving traffic redirection, honeypots, and counter-reconnaissance — may have legal implications that vary by jurisdiction. Even passive OSINT collection should be reviewed against your organization's policies and applicable regulations before deployment.
+
+This repository is not legal advice. When in doubt, consult appropriate parties before acting on any ideas presented here.

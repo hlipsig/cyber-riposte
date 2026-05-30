@@ -1,0 +1,189 @@
+[
+  {
+    "id": "aud-001-20240615-031407",
+    "incident_id": "INC-2024-0615-0314",
+    "timestamp": "2024-06-15T03:14:07Z",
+    "action": {
+      "id": "detection",
+      "name": "Reconnaissance detected",
+      "tier": null,
+      "parameters": {
+        "source_ip": "198.51.100.23",
+        "alert_signature": "ET SCAN Nmap Scripting Engine User-Agent Detected",
+        "ports_scanned": 847,
+        "scan_duration_seconds": 12
+      },
+      "result": "detection"
+    },
+    "justification": {
+      "trigger": "suricata-eve-alert",
+      "detection_confidence": 0.97,
+      "evidence_refs": ["EVE-20240615-031407-001"],
+      "playbook_rule": null,
+      "reasoning": "847 ports scanned from single source in 12 seconds matches Nmap SYN scan pattern"
+    },
+    "context": {
+      "attacker_ip": "198.51.100.23",
+      "target_host": "prod-perimeter",
+      "related_entries": [],
+      "osint_collected": false,
+      "honeypot_active": false
+    }
+  },
+  {
+    "id": "aud-002-20240615-031408",
+    "incident_id": "INC-2024-0615-0314",
+    "timestamp": "2024-06-15T03:14:08Z",
+    "action": {
+      "id": "redirect-to-honeypot",
+      "name": "Redirect traffic to honeypot",
+      "tier": 1,
+      "parameters": {
+        "source_ip": "198.51.100.23",
+        "honeypot_ip": "10.0.0.99",
+        "rule_type": "nftables-dnat",
+        "ports_redirected": "all"
+      },
+      "result": "success",
+      "rollback_handle": "0x3a7f",
+      "expires_at": "2024-06-16T03:14:08Z"
+    },
+    "justification": {
+      "trigger": "recon-detected",
+      "detection_confidence": 0.97,
+      "evidence_refs": ["aud-001-20240615-031407"],
+      "playbook_rule": "redirect-to-honeypot",
+      "reasoning": "Recon pattern confirmed, IP not in allowlist, honeypot health check passed"
+    },
+    "context": {
+      "attacker_ip": "198.51.100.23",
+      "target_host": "prod-perimeter",
+      "related_entries": ["aud-001-20240615-031407"],
+      "osint_collected": false,
+      "honeypot_active": true
+    }
+  },
+  {
+    "id": "aud-003-20240615-031409",
+    "incident_id": "INC-2024-0615-0314",
+    "timestamp": "2024-06-15T03:14:09Z",
+    "action": {
+      "id": "run-osint",
+      "name": "Run passive OSINT on source IP",
+      "tier": 1,
+      "parameters": {
+        "source_ip": "198.51.100.23",
+        "modules": ["whois", "reverse_dns", "shodan", "cert_transparency"],
+        "passive_only": true
+      },
+      "result": "success"
+    },
+    "justification": {
+      "trigger": "recon-detected",
+      "detection_confidence": 0.97,
+      "evidence_refs": ["aud-001-20240615-031407"],
+      "playbook_rule": "run-osint",
+      "reasoning": "Standard OSINT collection triggered by recon detection, all modules passive"
+    },
+    "context": {
+      "attacker_ip": "198.51.100.23",
+      "target_host": "prod-perimeter",
+      "related_entries": ["aud-001-20240615-031407", "aud-002-20240615-031408"],
+      "osint_collected": true,
+      "honeypot_active": true
+    }
+  },
+  {
+    "id": "aud-004-20240615-031422",
+    "incident_id": "INC-2024-0615-0314",
+    "timestamp": "2024-06-15T03:14:22Z",
+    "action": {
+      "id": "collect-honeypot-evidence",
+      "name": "Collect honeypot interaction logs",
+      "tier": 1,
+      "parameters": {
+        "source_ip": "198.51.100.23",
+        "honeypot_ip": "10.0.0.99",
+        "log_types": ["cowrie-ssh", "glastopf-http", "pcap"],
+        "pcap_filter": "host 198.51.100.23"
+      },
+      "result": "success"
+    },
+    "justification": {
+      "trigger": "attacker-interacting-with-honeypot",
+      "detection_confidence": 1.0,
+      "evidence_refs": ["aud-002-20240615-031408"],
+      "playbook_rule": "collect-honeypot-evidence",
+      "reasoning": "Attacker SSH session detected on honeypot, starting evidence collection"
+    },
+    "context": {
+      "attacker_ip": "198.51.100.23",
+      "target_host": "honeypot-10.0.0.99",
+      "related_entries": ["aud-001-20240615-031407", "aud-002-20240615-031408", "aud-003-20240615-031409"],
+      "osint_collected": true,
+      "honeypot_active": true
+    }
+  },
+  {
+    "id": "aud-005-20240615-033742",
+    "incident_id": "INC-2024-0615-0314",
+    "timestamp": "2024-06-15T03:37:42Z",
+    "action": {
+      "id": "temp-block-ip",
+      "name": "Temporary IP block",
+      "tier": 1,
+      "parameters": {
+        "source_ip": "198.51.100.23",
+        "rule_type": "nftables-drop",
+        "reason": "Post-interaction block"
+      },
+      "result": "success",
+      "rollback_handle": "0x3a81",
+      "expires_at": "2024-06-15T04:37:42Z"
+    },
+    "justification": {
+      "trigger": "recon-detected",
+      "detection_confidence": 0.97,
+      "evidence_refs": ["aud-001-20240615-031407", "aud-004-20240615-031422"],
+      "playbook_rule": "temp-block-ip",
+      "reasoning": "Attacker disconnected from honeypot after 23 minutes. Applying temp block to prevent re-engagement. Honeypot session yielded 47 commands and credential spray."
+    },
+    "context": {
+      "attacker_ip": "198.51.100.23",
+      "target_host": "prod-perimeter",
+      "related_entries": ["aud-001-20240615-031407", "aud-002-20240615-031408", "aud-003-20240615-031409", "aud-004-20240615-031422"],
+      "osint_collected": true,
+      "honeypot_active": false
+    }
+  },
+  {
+    "id": "aud-006-20240615-033745",
+    "incident_id": "INC-2024-0615-0314",
+    "timestamp": "2024-06-15T03:37:45Z",
+    "action": {
+      "id": "generate-postmortem",
+      "name": "Generate post-mortem report",
+      "tier": null,
+      "parameters": {
+        "incident_id": "INC-2024-0615-0314",
+        "output_path": "/var/log/cyber-riposte/postmortems/INC-2024-0615-0314.md",
+        "includes": ["timeline", "actions", "dossier", "evidence-chain", "iocs", "recommendations"]
+      },
+      "result": "success"
+    },
+    "justification": {
+      "trigger": "incident-complete",
+      "detection_confidence": 1.0,
+      "evidence_refs": ["aud-001-20240615-031407", "aud-002-20240615-031408", "aud-003-20240615-031409", "aud-004-20240615-031422", "aud-005-20240615-033742"],
+      "playbook_rule": null,
+      "reasoning": "All autonomous actions complete. Generating post-mortem for morning review."
+    },
+    "context": {
+      "attacker_ip": "198.51.100.23",
+      "target_host": "prod-perimeter",
+      "related_entries": ["aud-001-20240615-031407", "aud-002-20240615-031408", "aud-003-20240615-031409", "aud-004-20240615-031422", "aud-005-20240615-033742"],
+      "osint_collected": true,
+      "honeypot_active": false
+    }
+  }
+]

@@ -29,27 +29,38 @@ While the attacker probes the honeypot, the agent runs passive OSINT on the atta
 The attacker scanned us. We scanned them back. Their momentum is now our intelligence.
 
 ### Act 4: The Touch (~1 min)
-The agent opens a PR with two things:
-1. A block/reroute rule for the attacker's IP
-2. A full **intelligence dossier** on the attacker's infrastructure
 
-The security team reviews a PR that doesn't just say "block this IP" — it says "here's who they are, what they're running, and what else they own."
+This is 3am. Nobody is awake. The agent doesn't open a PR and wait — it **acts**.
+
+Every action it takes comes from a pre-approved playbook — a pool of responses the security team reviewed and authorized in advance. The agent picks from that pool based on what it sees. It can redirect to honeypots, apply block rules, run OSINT, and collect evidence — all without waking anyone up.
+
+But it **records everything**. Every decision, every action, every piece of evidence — timestamped and structured into an audit log. When the team arrives in the morning, they don't find a PR to review. They find a **post-mortem report**: here's what happened, here's what I did about it, here's the dossier on the attacker, here's the evidence. Review it, adjust the playbook if needed, and move on.
+
+The agent is the night shift. The human is the morning review.
 
 **One scan. Two dossiers. Only one of them knew it was happening.**
 
 ## Key Slide
 
 ```
-Attacker                          Defender (AI Agent)
-────────                          ──────────────────
-Scans your ports        ───▶      Detects scan
-                                  Reroutes to honeypot
-                        ◀───      Runs OSINT on attacker IP
-Probes honeypot         ───▶      Logs all TTPs
-                                  WHOIS, rDNS, Shodan, CT
-                        ◀───      Builds attacker dossier
-Gets blocked            ◀───      Opens PR: block + intel report
+  3:14 AM                               AI Agent
+  ────────                               ────────
+  Attacker scans ports          ───▶     Detects scan
+                                         Checks action pool ✓
+                                         Redirects to honeypot (pre-approved)
+                                ◀───     Runs OSINT (pre-approved)
+  Probes honeypot               ───▶     Logs all TTPs
+                                         Builds dossier
+  Gets blocked                  ◀───     Applies block rule (pre-approved)
+                                         Writes audit log
 
-They brought a scanner.
-You brought a mirror.
+  8:00 AM                               Security Team
+  ────────                               ─────────────
+                                         Reviews post-mortem report
+                                         Attacker dossier on their desk
+                                         Every agent action logged + justified
+                                         Adjusts playbook if needed
+
+  The agent is the night shift.
+  The human is the morning review.
 ```

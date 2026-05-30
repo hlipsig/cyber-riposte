@@ -1,0 +1,141 @@
+# Pre-Approved Action Pool
+#
+# These are the actions the AI agent is authorized to execute autonomously.
+# The security team reviews and updates this file. The agent can ONLY take
+# actions listed here — anything outside the pool requires a PR or human.
+#
+# Tier 1: Auto-execute           — agent acts, logs, no human needed
+# Tier 2: Auto-execute + notify  — agent acts, logs, alerts on-call
+# Tier 3: PR required            — agent proposes, human approves
+
+actions:
+
+  # --- Tier 1: Auto-execute (silent, logged) ---
+
+  - id: redirect-to-honeypot
+    tier: 1
+    name: "Redirect traffic to honeypot"
+    description: "Apply nftables DNAT rule to reroute attacker to honeypot"
+    trigger: recon-detected
+    constraints:
+      max_ips_per_hour: 50
+      honeypot_must_be_healthy: true
+      exclude_allowlisted_ips: true
+    auto_expire: 24h
+    rollback: "nft delete rule (handle stored in audit log)"
+
+  - id: run-osint
+    tier: 1
+    name: "Run passive OSINT on source IP"
+    description: "WHOIS, reverse DNS, Shodan lookup, Certificate Transparency search"
+    trigger: recon-detected
+    constraints:
+      passive_only: true
+      no_packets_to_target: true
+      rate_limit: 10/minute
+    data_retention: 90d
+
+  - id: collect-honeypot-evidence
+    tier: 1
+    name: "Collect honeypot interaction logs"
+    description: "Capture commands, credentials, downloads, and PCAP from honeypot"
+    trigger: attacker-interacting-with-honeypot
+    constraints:
+      max_pcap_size_mb: 500
+    data_retention: 90d
+
+  - id: temp-block-ip
+    tier: 1
+    name: "Temporary IP block"
+    description: "Apply nftables drop rule for a single IP"
+    trigger: recon-detected OR high-severity-ids-alert
+    constraints:
+      single_ip_only: true
+      no_cidr_blocks: true
+      exclude_allowlisted_ips: true
+    auto_expire: 1h
+    rollback: "nft delete rule (handle stored in audit log)"
+
+  # --- Tier 2: Auto-execute + notify on-call ---
+
+  - id: block-ip-range
+    tier: 2
+    name: "Block IP range"
+    description: "Apply nftables drop rule for a CIDR block"
+    trigger: coordinated-attack-detected
+    constraints:
+      max_prefix_length: 24  # /24 max, nothing broader
+      exclude_allowlisted_ranges: true
+      require_confidence_score: 0.85
+    auto_expire: 4h
+    rollback: "nft delete rule (handle stored in audit log)"
+    notify:
+      channel: "#security-incidents"
+      pagerduty_severity: warning
+
+  - id: sinkhole-domain
+    tier: 2
+    name: "Sinkhole a domain"
+    description: "Add Unbound local-zone redirect for a C2/exfil domain"
+    trigger: dns-entropy-anomaly OR threat-intel-match
+    constraints:
+      require_evidence: true
+      exclude_allowlisted_domains: true
+    auto_expire: 24h
+    notify:
+      channel: "#security-incidents"
+
+  - id: isolate-workload
+    tier: 2
+    name: "Apply NetworkPolicy to isolate workload"
+    description: "Deploy K8s NetworkPolicy to cut off a compromised pod"
+    trigger: anomalous-east-west-traffic
+    constraints:
+      namespace_scope_only: true
+      preserve_dns: true
+      require_confidence_score: 0.80
+    auto_expire: 4h
+    notify:
+      channel: "#security-incidents"
+      pagerduty_severity: high
+
+  # --- Tier 3: PR required (human must approve) ---
+
+  - id: permanent-block-rule
+    tier: 3
+    name: "Permanent firewall rule"
+    description: "Persistent nftables rule that survives expiry"
+    trigger: post-mortem-recommendation
+    requires: human-approval-via-pr
+
+  - id: new-suricata-rule
+    tier: 3
+    name: "New IDS detection rule"
+    description: "Custom Suricata rule for a novel attack pattern"
+    trigger: novel-pattern-in-honeypot-logs
+    requires: human-approval-via-pr
+
+  - id: infrastructure-change
+    tier: 3
+    name: "Infrastructure modification"
+    description: "Any change to production routing, DNS, or network topology"
+    trigger: agent-recommendation
+    requires: human-approval-via-pr
+
+# --- Global constraints ---
+
+global:
+  allowlisted_ips:
+    - 127.0.0.1
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+
+  allowlisted_domains:
+    - "*.internal.company.com"
+    - "*.googleapis.com"
+    - "*.amazonaws.com"
+
+  max_actions_per_hour: 100
+  audit_log_path: /var/log/cyber-riposte/audit.jsonl
+  postmortem_output_path: /var/log/cyber-riposte/postmortems/
