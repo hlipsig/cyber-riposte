@@ -1,0 +1,33 @@
+Cyber Riposte — End-to-End Scenario Ideas
+==========================================
+
+1. THE TARPIT MAZE
+   Agent detects recon, reroutes attacker to dynamically generated fake
+   infrastructure. Fake shells, fake files, artificial latency. Logs every
+   command, path, and credential attempt. The longer they stay, the more
+   behavioral fingerprint you collect.
+
+2. THE RICKROLL REVERSE PROXY
+   Agent detects web app probing (SQLi, path traversal, admin brute-force).
+   Reverse proxy serves increasingly absurd responses — real-looking login
+   pages that always fail, fake database dumps with honeytokens, eventually
+   redirects to a rickroll. Every payload logged for TTP classification.
+
+3. THE MIRROR — TURN THEIR TOOLS AGAINST THEM  ← SELECTED
+   Agent detects attacker source IP, runs passive OSINT in real time (WHOIS,
+   reverse DNS, Shodan, cert transparency). Attacker redirected to honeypot
+   while agent builds a dossier on their infrastructure. PR includes block
+   rule + full intelligence report. "You scanned us, so we scanned you back."
+
+4. THE INFINITE CREDENTIAL LEAK
+   Attacker finds planted canary credentials. Honeypot auth "succeeds" and
+   drops them into a fake environment where every action generates more fake
+   credentials and services. They collect fabricated "intel" while you record
+   their tools, techniques, and exfil methods. Counterintelligence operation.
+
+5. THE ADAPTIVE DECOY
+   Agent detects attacker, predicts next move via lateral movement prediction,
+   races ahead to deploy decoys. Attacker compromises host A, agent predicts
+   host B, deploys honeypot at B before they arrive. Every pivot, agent is
+   one step ahead. Progressively builds behavioral profile.
+   Story arc: detect → predict → deploy decoy → collect → reveal.

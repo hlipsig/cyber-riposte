@@ -1,0 +1,53 @@
+# Honeypot stack for The Mirror scenario.
+# Keeps the attacker engaged while OSINT runs in the background.
+
+services:
+  cowrie:
+    image: cowrie/cowrie:latest
+    ports:
+      - "2222:2222"   # SSH honeypot
+      - "2223:2223"   # Telnet honeypot
+    volumes:
+      - cowrie-logs:/cowrie/var/log/cowrie
+    environment:
+      - COWRIE_OUTPUT_JSON=true
+    restart: unless-stopped
+
+  http-honeypot:
+    image: mushorg/glastopf:latest
+    ports:
+      - "8080:80"     # HTTP honeypot
+    volumes:
+      - glastopf-logs:/opt/glastopf/log
+    restart: unless-stopped
+
+  tcpdump:
+    image: nicolaka/netshoot
+    network_mode: host
+    command: >
+      tcpdump -i any -w /captures/mirror-capture.pcap
+      host ${ATTACKER_IP:-0.0.0.0}
+    volumes:
+      - pcap-captures:/captures
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+
+  log-exporter:
+    image: alpine:3.19
+    volumes:
+      - cowrie-logs:/logs/cowrie:ro
+      - glastopf-logs:/logs/glastopf:ro
+      - pcap-captures:/logs/pcap:ro
+      - ./log-format.json:/config/log-format.json:ro
+    command: >
+      sh -c "while true; do
+        echo '[mirror] Honeypot logs available at /logs/';
+        ls -la /logs/cowrie/ /logs/glastopf/ /logs/pcap/ 2>/dev/null;
+        sleep 60;
+      done"
+
+volumes:
+  cowrie-logs:
+  glastopf-logs:
+  pcap-captures:

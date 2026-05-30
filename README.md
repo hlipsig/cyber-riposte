@@ -56,6 +56,14 @@ Telemetry Source          AI Agent                     GitOps / PR
 - **Human-in-the-loop** — the agent is fast but the operator has final say
 - **GitOps compatibility** — merged changes deploy through existing CI/CD pipelines (ArgoCD, Flux, Ansible, etc.)
 
+## End-to-End Scenario: The Mirror
+
+The [scenario-the-mirror](scenario-the-mirror/) directory contains a fully worked example that ties the playbooks together: an AI agent detects an attacker scanning your infrastructure, silently redirects them to a honeypot, and simultaneously runs passive OSINT on the attacker's own IP. The result is a PR that contains both the block rule *and* a full intelligence dossier on the attacker.
+
+> *"In fencing, a riposte uses your opponent's forward momentum against them. The Mirror is a digital riposte — they scanned us, so we scanned them back."*
+
+See [TALK.md](scenario-the-mirror/TALK.md) for the 5-minute presentation version.
+
 ## What This Repo Is (and Isn't)
 
 **Is:** A collection of templates and ideas for how an AI agent could propose defensive responses as code. A starting point for discussion and experimentation.

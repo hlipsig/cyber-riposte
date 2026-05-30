@@ -1,0 +1,41 @@
+{
+  "description": "Expected log schema from honeypot interactions for TTP extraction",
+  "cowrie_session": {
+    "session_id": "string",
+    "src_ip": "string",
+    "src_port": "integer",
+    "timestamp": "ISO8601",
+    "commands": [
+      {
+        "timestamp": "ISO8601",
+        "input": "string (raw command entered by attacker)",
+        "success": "boolean"
+      }
+    ],
+    "credentials_attempted": [
+      {
+        "username": "string",
+        "password": "string",
+        "timestamp": "ISO8601"
+      }
+    ],
+    "files_downloaded": [
+      {
+        "url": "string",
+        "sha256": "string",
+        "filename": "string"
+      }
+    ],
+    "session_duration_seconds": "integer"
+  },
+  "http_interaction": {
+    "src_ip": "string",
+    "timestamp": "ISO8601",
+    "method": "string",
+    "path": "string",
+    "headers": "object",
+    "body": "string",
+    "user_agent": "string",
+    "payload_type": "string (sqli, xss, traversal, rfi, lfi, etc.)"
+  }
+}
