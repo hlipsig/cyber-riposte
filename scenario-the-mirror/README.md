@@ -178,7 +178,7 @@ scenario-the-mirror/
 
 ## Legal & Ethical Notes
 
-- All OSINT in this scenario uses **publicly available data only** — WHOIS records, DNS, Shodan (which indexes public-facing services), and Certificate Transparency logs (which are public by design)
+- All OSINT (**Open Source Intelligence** — intelligence gathered from publicly available sources) in this scenario uses **publicly available data only** — WHOIS records, DNS, Shodan (which indexes public-facing services), and Certificate Transparency logs (which are public by design)
 - **No active scanning** of the attacker's infrastructure is performed
 - The honeypot collects data about traffic the attacker **voluntarily sends to your network**
 - Always consult legal counsel before implementing active defense measures in production
