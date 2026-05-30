@@ -14,10 +14,28 @@ This works because the agent only executes actions from a **pre-approved playboo
 
 ### Phase 1: Detection
 
-The agent monitors telemetry for reconnaissance patterns:
+The agent monitors telemetry for reconnaissance through two complementary signals:
+
+**IDS Alerts** — Suricata EVE log alerts for:
 - Port scan signatures (many ports from one source in short timeframes)
 - Directory brute-forcing (high 404 rate from a single source)
-- Version fingerprinting (specific probe patterns for known scanners like Nmap, Masscan)
+- Version fingerprinting (specific probe patterns for known scanners)
+
+**User-Agent Analysis** — HTTP request user-agent strings matched against known offensive tools (see `suspicious-user-agents.yaml`):
+
+| Category | Tools Detected | Threat Level |
+|----------|---------------|--------------|
+| Recon scanners | Nmap, Masscan, Nuclei, httpx, ZGrab, Censys, Shodan | High/Medium |
+| Directory brute-force | Gobuster, Feroxbuster, ffuf, Dirsearch, DirBuster | High |
+| Vulnerability scanners | Nikto, WPScan, sqlmap, Acunetix, Nessus, ZAP | High |
+| Secret scanners | TruffleHog, Gitleaks | High |
+| Exploit frameworks | Metasploit (IE6 default), Cobalt Strike | High |
+| Generic automation | python-requests, Go-http-client, curl, wget, axios | Low (elevated at volume on sensitive endpoints) |
+| Headless browsers | HeadlessChrome, PhantomJS | Low/Medium |
+
+Either signal alone triggers the agent, but both together increase detection confidence. A Suricata alert from an IP that's also using `sqlmap/1.8` as its user-agent is near-certain hostile.
+
+The agent also applies **composite rules** — a `python-requests` user-agent is low-confidence on its own, but `python-requests` hitting `/admin` 10 times in 5 minutes is elevated to high.
 
 Source: IDS alerts (Suricata EVE log), web server access logs, firewall connection logs.
 
@@ -40,6 +58,7 @@ While the attacker probes the honeypot, the agent runs passive OSINT against the
 | `reverse_dns.py` | DNS PTR records | Hostname, hosting provider, possible machine role |
 | `shodan_lookup.py` | Shodan API | Open ports, service banners, OS, vulnerabilities on attacker's machine |
 | `cert_transparency.py` | CT logs (crt.sh) | TLS certificates issued to domains on this IP — reveals other attacker infrastructure |
+| `user_agent_detector.py` | HTTP request headers | Offensive tool identification, attacker toolchain profiling |
 
 All lookups are passive — no packets are sent to the attacker's IP. This is public data collection, not active hacking back.
 
@@ -129,11 +148,13 @@ scenario-the-mirror/
 ├── mirror_agent.py                 # Main agent orchestrator (autonomous mode)
 ├── action-pool.yaml                # Pre-approved actions the agent can execute
 ├── audit-log-schema.json           # Schema for structured audit trail
+├── suspicious-user-agents.yaml     # User-agent signatures for offensive tool detection
 ├── osint-modules/
 │   ├── whois_lookup.py             # WHOIS registry lookup
 │   ├── reverse_dns.py              # Reverse DNS (PTR) lookup
 │   ├── shodan_lookup.py            # Shodan API query
-│   └── cert_transparency.py        # Certificate Transparency log search
+│   ├── cert_transparency.py        # Certificate Transparency log search
+│   └── user_agent_detector.py      # User-agent classification and tool identification
 ├── honeypot/
 │   ├── docker-compose.yml          # Honeypot stack
 │   └── log-format.json             # Expected log schema for TTP extraction

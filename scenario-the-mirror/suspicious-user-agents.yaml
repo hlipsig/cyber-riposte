@@ -1,0 +1,274 @@
+# Suspicious User-Agent Signatures
+#
+# The agent matches incoming request user-agents against these patterns.
+# A hit doesn't guarantee malice (pentesters use these tools legitimately),
+# but combined with other signals (source IP, target endpoint, volume)
+# it's a strong indicator.
+#
+# match types: contains, startswith, regex, exact
+# threat_level: high (exploitation), medium (scanning/recon), low (automation)
+
+categories:
+
+  - name: recon_scanners
+    description: "Network and web reconnaissance tools"
+    signatures:
+      - name: nmap
+        pattern: "Nmap Scripting Engine"
+        match: contains
+        threat_level: high
+        confidence: 0.95
+        description: "Nmap NSE scripts — active service fingerprinting"
+
+      - name: masscan
+        pattern: "masscan/"
+        match: startswith
+        threat_level: high
+        confidence: 0.95
+        description: "Masscan — high-speed port scanner"
+
+      - name: nuclei
+        pattern: "Nuclei"
+        match: contains
+        threat_level: high
+        confidence: 0.95
+        description: "ProjectDiscovery Nuclei — template-based vulnerability scanner"
+
+      - name: httpx
+        pattern: "httpx"
+        match: contains
+        threat_level: medium
+        confidence: 0.85
+        description: "ProjectDiscovery httpx — HTTP probing tool"
+
+      - name: zgrab
+        pattern: "zgrab"
+        match: contains
+        threat_level: medium
+        confidence: 0.90
+        description: "ZGrab — Censys internet-wide scanner"
+
+      - name: censys
+        pattern: "Censys/"
+        match: startswith
+        threat_level: medium
+        confidence: 0.90
+        description: "Censys crawler"
+
+      - name: shodan
+        pattern: "Shodan"
+        match: contains
+        threat_level: medium
+        confidence: 0.85
+        description: "Shodan internet scanner"
+
+  - name: directory_bruteforce
+    description: "Directory and path enumeration tools"
+    signatures:
+      - name: gobuster
+        pattern: "gobuster/"
+        match: startswith
+        threat_level: high
+        confidence: 0.95
+        description: "Gobuster — directory/DNS/vhost brute-forcing"
+
+      - name: feroxbuster
+        pattern: "feroxbuster/"
+        match: startswith
+        threat_level: high
+        confidence: 0.95
+        description: "Feroxbuster — recursive content discovery"
+
+      - name: ffuf
+        pattern: "Fuzz Faster U Fool"
+        match: contains
+        threat_level: high
+        confidence: 0.95
+        description: "ffuf — web fuzzer"
+
+      - name: dirsearch
+        pattern: "dirsearch/"
+        match: startswith
+        threat_level: high
+        confidence: 0.95
+        description: "Dirsearch — path brute-forcer"
+
+      - name: dirbuster
+        pattern: "DirBuster"
+        match: contains
+        threat_level: high
+        confidence: 0.95
+        description: "OWASP DirBuster — directory brute-forcer"
+
+  - name: vuln_scanners
+    description: "Vulnerability scanning and assessment tools"
+    signatures:
+      - name: nikto
+        pattern: "Nikto/"
+        match: startswith
+        threat_level: high
+        confidence: 0.95
+        description: "Nikto — web server vulnerability scanner"
+
+      - name: wpscan
+        pattern: "WPScan"
+        match: contains
+        threat_level: high
+        confidence: 0.95
+        description: "WPScan — WordPress vulnerability scanner"
+
+      - name: sqlmap
+        pattern: "sqlmap/"
+        match: startswith
+        threat_level: high
+        confidence: 0.95
+        description: "sqlmap — automated SQL injection tool"
+
+      - name: acunetix
+        pattern: "Acunetix"
+        match: contains
+        threat_level: high
+        confidence: 0.90
+        description: "Acunetix web vulnerability scanner"
+
+      - name: nessus
+        pattern: "Nessus"
+        match: contains
+        threat_level: high
+        confidence: 0.90
+        description: "Tenable Nessus vulnerability scanner"
+
+      - name: openvas
+        pattern: "OpenVAS"
+        match: contains
+        threat_level: high
+        confidence: 0.90
+        description: "OpenVAS vulnerability scanner"
+
+      - name: zap
+        pattern: "OWASP ZAP"
+        match: contains
+        threat_level: high
+        confidence: 0.90
+        description: "OWASP ZAP — intercepting proxy and scanner"
+
+      - name: burp
+        pattern: "Burp Suite"
+        match: contains
+        threat_level: medium
+        confidence: 0.85
+        description: "Burp Suite — web security testing platform"
+
+  - name: secret_scanners
+    description: "Credential and secret scanning tools"
+    signatures:
+      - name: trufflehog
+        pattern: "trufflehog"
+        match: contains
+        threat_level: high
+        confidence: 0.95
+        description: "TruffleHog — secret/credential scanner"
+
+      - name: gitleaks
+        pattern: "gitleaks/"
+        match: startswith
+        threat_level: high
+        confidence: 0.95
+        description: "Gitleaks — secret scanner for git repos"
+
+  - name: exploit_frameworks
+    description: "Exploitation and post-exploitation frameworks"
+    signatures:
+      - name: metasploit-default
+        pattern: "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)"
+        match: exact
+        threat_level: high
+        confidence: 0.80
+        description: "Metasploit default user-agent — ancient IE6 on XP"
+
+      - name: cobalt-strike-default
+        pattern: "CobaltStrike"
+        match: contains
+        threat_level: high
+        confidence: 0.90
+        description: "Cobalt Strike default beacon user-agent"
+
+  - name: generic_automation
+    description: "Generic HTTP clients — suspicious at high volume or on sensitive endpoints"
+    signatures:
+      - name: python-requests
+        pattern: "python-requests/"
+        match: startswith
+        threat_level: low
+        confidence: 0.5
+        description: "Python requests library — flag at volume or on auth endpoints"
+
+      - name: go-http-client
+        pattern: "Go-http-client/"
+        match: startswith
+        threat_level: low
+        confidence: 0.5
+        description: "Go default HTTP client — many offensive tools are written in Go"
+
+      - name: curl
+        pattern: "curl/"
+        match: startswith
+        threat_level: low
+        confidence: 0.4
+        description: "curl — legitimate but worth flagging at volume"
+
+      - name: wget
+        pattern: "Wget/"
+        match: startswith
+        threat_level: low
+        confidence: 0.4
+        description: "wget — flag when downloading from sensitive paths"
+
+      - name: axios
+        pattern: "axios/"
+        match: startswith
+        threat_level: low
+        confidence: 0.4
+        description: "Axios Node.js HTTP client"
+
+  - name: headless_browsers
+    description: "Headless browsers used for scraping and automation"
+    signatures:
+      - name: headless-chrome
+        pattern: "HeadlessChrome/"
+        match: contains
+        threat_level: low
+        confidence: 0.6
+        description: "Headless Chrome — browser automation, scraping"
+
+      - name: phantomjs
+        pattern: "PhantomJS/"
+        match: contains
+        threat_level: medium
+        confidence: 0.7
+        description: "PhantomJS — deprecated headless browser, still used in older attack tools"
+
+# Composite rules — these combine user-agent signals with other context.
+# The agent evaluates these after the signature match.
+composite_rules:
+
+  - name: generic-automation-on-auth
+    description: "Generic HTTP client hitting auth endpoints = credential stuffing"
+    ua_categories: [generic_automation]
+    endpoint_patterns: ["/login", "/auth", "/oauth", "/token", "/api/v1/login"]
+    volume_threshold: 10  # requests in 5 minutes
+    elevate_threat_to: high
+
+  - name: generic-automation-on-admin
+    description: "Generic HTTP client on admin endpoints = unauthorized recon"
+    ua_categories: [generic_automation]
+    endpoint_patterns: ["/admin", "/wp-admin", "/management", "/internal"]
+    volume_threshold: 3
+    elevate_threat_to: high
+
+  - name: headless-on-login
+    description: "Headless browser on login pages at volume = credential stuffing"
+    ua_categories: [headless_browsers]
+    endpoint_patterns: ["/login", "/auth", "/signin"]
+    volume_threshold: 20
+    elevate_threat_to: medium

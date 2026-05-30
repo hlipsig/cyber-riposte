@@ -23,6 +23,7 @@ from osint_modules.whois_lookup import whois_lookup
 from osint_modules.reverse_dns import reverse_dns
 from osint_modules.shodan_lookup import shodan_lookup
 from osint_modules.cert_transparency import ct_lookup
+from osint_modules.user_agent_detector import classify_user_agent, analyze_ua_batch
 
 BASE_DIR = Path(__file__).parent
 TEMPLATE_DIR = BASE_DIR / "templates"
@@ -120,21 +121,78 @@ class ActionPool:
 
 
 def detect_recon(eve_event):
-    if eve_event.get("event_type") != "alert":
+    """
+    Detect reconnaissance from IDS alerts and/or user-agent analysis.
+
+    Detection sources:
+    1. Suricata alert categories (port scans, web attacks)
+    2. Suspicious user-agent strings (Nuclei, sqlmap, gobuster, etc.)
+
+    Either signal alone is sufficient to trigger, but both together
+    increase detection confidence.
+    """
+    detection = {
+        "src_ip": eve_event.get("src_ip"),
+        "timestamp": eve_event.get("timestamp"),
+        "signals": [],
+        "confidence": 0.0,
+    }
+
+    if eve_event.get("event_type") == "alert":
+        alert = eve_event.get("alert", {})
+        category = alert.get("category", "").lower()
+        recon_categories = ["attempted-recon", "network-scan", "web-application-attack"]
+        if any(cat in category for cat in recon_categories):
+            detection["signals"].append({
+                "type": "ids_alert",
+                "signature": alert.get("signature"),
+                "severity": alert.get("severity"),
+            })
+            detection["confidence"] = max(detection["confidence"], 0.90)
+
+    ua_string = eve_event.get("http", {}).get("http_user_agent", "")
+    if ua_string:
+        ua_result = classify_user_agent(ua_string)
+        if ua_result and ua_result.get("matched"):
+            detection["signals"].append({
+                "type": "user_agent",
+                "tool_name": ua_result["tool_name"],
+                "category": ua_result["category"],
+                "threat_level": ua_result["threat_level"],
+                "ua_string": ua_string,
+            })
+            ua_conf = ua_result.get("confidence", 0.5)
+            if detection["confidence"] > 0:
+                detection["confidence"] = min(1.0, detection["confidence"] + ua_conf * 0.5)
+            else:
+                detection["confidence"] = ua_conf
+
+    if not detection["signals"]:
         return None
 
-    alert = eve_event.get("alert", {})
-    category = alert.get("category", "").lower()
-    recon_categories = ["attempted-recon", "network-scan", "web-application-attack"]
+    detection["signature"] = _summarize_signals(detection["signals"])
+    detection["severity"] = _derive_severity(detection["signals"])
 
-    if any(cat in category for cat in recon_categories):
-        return {
-            "src_ip": eve_event.get("src_ip"),
-            "signature": alert.get("signature"),
-            "severity": alert.get("severity"),
-            "timestamp": eve_event.get("timestamp"),
-        }
-    return None
+    return detection
+
+
+def _summarize_signals(signals):
+    parts = []
+    for s in signals:
+        if s["type"] == "ids_alert":
+            parts.append(s["signature"])
+        elif s["type"] == "user_agent":
+            parts.append(f"suspicious UA: {s['tool_name']}")
+    return " + ".join(parts)
+
+
+def _derive_severity(signals):
+    for s in signals:
+        if s["type"] == "user_agent" and s.get("threat_level") == "high":
+            return 1
+        if s["type"] == "ids_alert" and s.get("severity", 99) <= 2:
+            return 1
+    return 2
 
 
 def execute_redirect(attacker_ip, pool, audit, incident_id, detection):
@@ -169,7 +227,7 @@ def execute_redirect(attacker_ip, pool, audit, incident_id, detection):
         result="success" if result.returncode == 0 else "failed",
         justification={
             "trigger": "recon-detected",
-            "detection_confidence": 0.97,
+            "detection_confidence": detection.get("confidence", 0.97),
             "evidence_refs": [detection.get("timestamp", "")],
             "playbook_rule": action_id,
             "reasoning": "Recon pattern confirmed, IP not in allowlist, honeypot health check passed",
@@ -220,7 +278,7 @@ def execute_osint(attacker_ip, pool, audit, incident_id, detection):
         result="success",
         justification={
             "trigger": "recon-detected",
-            "detection_confidence": 0.97,
+            "detection_confidence": detection.get("confidence", 0.97),
             "evidence_refs": [detection.get("timestamp", "")],
             "playbook_rule": action_id,
             "reasoning": "Standard OSINT collection, all modules passive, within rate limits",
@@ -255,7 +313,7 @@ def execute_temp_block(attacker_ip, pool, audit, incident_id, detection):
         result="success" if result.returncode == 0 else "failed",
         justification={
             "trigger": "recon-detected",
-            "detection_confidence": 0.97,
+            "detection_confidence": detection.get("confidence", 0.97),
             "evidence_refs": [detection.get("timestamp", "")],
             "playbook_rule": action_id,
             "reasoning": "Attacker session complete, applying temp block to prevent re-engagement",
@@ -387,7 +445,10 @@ def run(eve_stream):
         incident_id = f"INC-{now.strftime('%Y-%m%d-%H%M')}"
 
         print(f"[mirror] === Incident {incident_id} ===")
+        signal_types = [s["type"] for s in detection.get("signals", [])]
         print(f"[mirror] Recon from {attacker_ip}: {detection['signature']}")
+        print(f"[mirror] Detection signals: {', '.join(signal_types)} "
+              f"(confidence: {detection.get('confidence', 0):.2f})")
 
         # Phase 1: Redirect to honeypot (Tier 1 — auto-execute)
         print(f"[mirror] [T1] Redirecting {attacker_ip} → honeypot {HONEYPOT_IP}")

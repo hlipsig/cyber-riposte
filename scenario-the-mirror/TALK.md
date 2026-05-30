@@ -11,7 +11,9 @@ In fencing, a **riposte** is the counterattack you launch immediately after parr
 ### Act 1: The Lunge (~1 min)
 An attacker begins scanning your perimeter. Port scans, directory brute-forcing, version fingerprinting. Normal Tuesday.
 
-Your AI agent sees it in the telemetry. But instead of just blocking the IP, it recognizes an opportunity.
+Your AI agent sees it in the telemetry — and it sees *two* things. First, the IDS alert: port scan detected. But second, the HTTP user-agent string says `Nuclei - Open-source project`. The attacker's tool just introduced itself. Many of them do — sqlmap, Gobuster, Nikto, even TruffleHog. A surprising number of attackers never change the default.
+
+Instead of just blocking the IP, the agent recognizes an opportunity.
 
 ### Act 2: The Parry (~1 min)
 The agent reroutes the attacker to a honeypot — they keep "working" against what looks like your real infrastructure. They think they're making progress. They're not.
@@ -21,12 +23,13 @@ Meanwhile, the agent has already started its counterintelligence work — using 
 ### Act 3: The Riposte (~2 min)
 While the attacker probes the honeypot, the agent runs passive OSINT on the attacker's IP:
 
+- **User-Agent** → the attacker's own tool told us it's Nuclei. Now we know their toolchain.
 - **WHOIS** → who owns this IP range? A VPS provider? A compromised residential ISP?
 - **Reverse DNS** → does this IP have a hostname? Does it tell us anything?
 - **Shodan** → what services is the *attacker's* machine running? Open ports? Banners?
 - **Certificate Transparency** → any TLS certs issued to domains on this IP? Reveals their other infrastructure.
 
-The attacker scanned us. We scanned them back. Their momentum is now our intelligence.
+The attacker scanned us. We scanned them back. Their own tools introduced them. Their momentum is now our intelligence.
 
 ### Act 4: The Touch (~1 min)
 
@@ -46,10 +49,12 @@ The agent is the night shift. The human is the morning review.
   3:14 AM                               AI Agent
   ────────                               ────────
   Attacker scans ports          ───▶     Detects scan
+  UA: "Nuclei"                  ───▶     Identifies attacker toolchain
                                          Checks action pool ✓
                                          Redirects to honeypot (pre-approved)
                                 ◀───     Runs OSINT (pre-approved)
   Probes honeypot               ───▶     Logs all TTPs
+  UA: "sqlmap/1.8"              ───▶     Tools keep introducing themselves
                                          Builds dossier
   Gets blocked                  ◀───     Applies block rule (pre-approved)
                                          Writes audit log
