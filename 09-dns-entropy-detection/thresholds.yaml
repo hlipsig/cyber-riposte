@@ -1,0 +1,21 @@
+# Detection thresholds for DNS tunneling via entropy analysis
+# Tune these based on your environment's normal DNS patterns.
+
+# Shannon entropy per character — normal domains are typically < 3.0
+entropy_threshold: 3.5
+
+# Average subdomain label length — tunneling tools use long labels
+label_length_threshold: 20
+
+# Minimum queries before flagging (avoid false positives on one-off lookups)
+min_query_count: 10
+
+# Analysis window in seconds
+window_seconds: 300
+
+# Domains to exclude from analysis (CDNs, known-good services)
+allowlist:
+  - "amazonaws.com"
+  - "cloudfront.net"
+  - "akamaiedge.net"
+  - "googleusercontent.com"

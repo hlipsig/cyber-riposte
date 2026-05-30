@@ -1,0 +1,39 @@
+# Known VPN/proxy provider CIDR ranges (simplified examples).
+# In production, use a commercial IP intelligence database (ip2location, ipinfo.io)
+# or maintain feeds from multiple sources.
+
+data_sources:
+  - name: ip2location
+    url: https://www.ip2location.com/database/ip2proxy
+    update_frequency: daily
+  - name: dan-tor-exit
+    url: https://check.torproject.org/torbulkexitlist
+    update_frequency: hourly
+
+providers:
+  - name: NordVPN
+    type: commercial_vpn
+    ranges:
+      - "185.230.126.0/24"
+      - "37.120.131.0/24"
+      - "89.187.160.0/22"
+
+  - name: ExpressVPN
+    type: commercial_vpn
+    ranges:
+      - "172.98.68.0/24"
+      - "209.205.0.0/20"
+
+  - name: Tor Exit Nodes
+    type: anonymizer
+    ranges:
+      # Tor exit nodes change frequently — use the bulk exit list API
+      - "185.220.100.0/24"
+      - "185.220.101.0/24"
+      - "199.249.230.0/24"
+
+  - name: Residential Proxy
+    type: residential_proxy
+    ranges:
+      # These are harder to enumerate — rely on IP intelligence APIs
+      - "0.0.0.0/32"  # placeholder

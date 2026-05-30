@@ -14,8 +14,10 @@ Telemetry Source          AI Agent                     GitOps / PR
 │ Auth logs     │──────▶│                  │        │                  │
 │ DNS query log │──────▶│  Observe         │        │  git checkout -b │
 │ IDS alerts    │──────▶│  Correlate       │───────▶│  Apply template  │
-│ K8s events    │──────▶│  Decide response │        │  Open PR         │
-│ Flow data     │──────▶│                  │        │  Assign reviewer │
+│ K8s events    │──────▶│  Predict         │        │  Open PR         │
+│ Flow data     │──────▶│  Decide response │        │  Assign reviewer │
+│ CVE feeds     │──────▶│                  │        │                  │
+│ IP reputation │──────▶│                  │        │                  │
 └──────────────┘       └──────────────────┘        └──────────────────┘
                                                           │
                                                           ▼
@@ -25,7 +27,7 @@ Telemetry Source          AI Agent                     GitOps / PR
 
 ## Playbooks
 
-Each directory contains a response template the agent would use when it detects a specific class of threat:
+### Reactive — Respond to observed threats
 
 | # | Directory | Agent Response | Trigger Signal |
 |---|-----------|---------------|----------------|
@@ -35,6 +37,17 @@ Each directory contains a response template the agent would use when it detects 
 | 4 | [04-canary-tokens](04-canary-tokens/) | PR new tripwire files into sensitive paths | Post-compromise access to decoy credentials |
 | 5 | [05-k8s-microsegment](05-k8s-microsegment/) | PR a NetworkPolicy to isolate a compromised pod | Anomalous east-west traffic in a cluster |
 | 6 | [06-suricata-response](06-suricata-response/) | PR a custom Suricata rule for a new attack pattern | Novel alert signatures in IDS telemetry |
+
+### Predictive — Act before the attack succeeds
+
+| # | Directory | Agent Response | Trigger Signal |
+|---|-----------|---------------|----------------|
+| 7 | [07-credential-stuffing-forecast](07-credential-stuffing-forecast/) | PR rate limits + temporary MFA enforcement | Distributed login failures across many IPs targeting common accounts |
+| 8 | [08-lateral-movement-prediction](08-lateral-movement-prediction/) | PR preemptive firewall rules to cut predicted pivot paths | Single host compromised — agent maps likely next targets |
+| 9 | [09-dns-entropy-detection](09-dns-entropy-detection/) | PR sinkhole for statistically anomalous domains | High-entropy DNS queries (tunneling fingerprint, no threat intel match) |
+| 10 | [10-cve-race](10-cve-race/) | PR WAF/IDS rules for predicted exploit pattern | New CVE published, affected services found in inventory, no public exploit yet |
+| 11 | [11-egress-baseline](11-egress-baseline/) | PR egress restriction for deviating workload | New destination, off-hours traffic, or volume spike vs. learned baseline |
+| 12 | [12-vpn-source-flagging](12-vpn-source-flagging/) | PR graduated response (block/rate-limit/challenge) | Source IP belongs to known VPN/proxy/Tor, hitting sensitive endpoints |
 
 ## Why PRs Instead of Direct Action?
 

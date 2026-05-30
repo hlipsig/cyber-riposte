@@ -1,0 +1,26 @@
+# Temporary MFA enforcement for accounts under active credential stuffing
+# The agent PRs this when it detects a campaign — auto-expires after the window.
+
+policy:
+  name: "stuffing-defense-{{ campaign_id }}"
+  type: temporary-mfa-enforcement
+
+  trigger:
+    reason: "Distributed credential stuffing campaign detected"
+    source_count: "{{ source_count }}"
+    detected_at: "{{ timestamp }}"
+
+  enforcement:
+    require_mfa: true
+    mfa_methods: ["totp", "webauthn"]
+    # Accounts without MFA enrolled get a forced enrollment prompt
+    force_enrollment: true
+
+  scope:
+    accounts:
+      # {{ accounts_list }}
+
+  expiry:
+    # Auto-remove this enforcement after the campaign subsides
+    duration_hours: 24
+    auto_extend_if_active: true

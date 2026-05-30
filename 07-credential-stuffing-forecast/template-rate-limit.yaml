@@ -1,0 +1,22 @@
+# Rate-limit template for targeted accounts during a stuffing campaign
+# Applied to nginx or HAProxy via GitOps on merge
+
+# nginx example: limit_req_zone per targeted account
+rate_limit:
+  zone_name: "stuffing_defense_{{ campaign_id }}"
+  requests_per_minute: 3
+  burst: 5
+  action: reject  # 429 after burst exceeded
+
+targeted_accounts:
+  # {{ accounts_list }}
+
+# nginx snippet the GitOps pipeline would render:
+#
+# limit_req_zone $binary_remote_addr zone=stuffing_defense:10m rate=3r/m;
+#
+# location /login {
+#     limit_req zone=stuffing_defense burst=5 nodelay;
+#     limit_req_status 429;
+#     proxy_pass http://auth_backend;
+# }

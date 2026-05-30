@@ -1,0 +1,27 @@
+# Example learned baseline for prod-api-01
+# The agent builds this over time from flow/netflow data.
+
+workload: prod-api-01
+ip: 10.1.2.10
+baseline_period: "2024-01-01 to 2024-01-14"
+
+destinations:
+  - 10.1.3.10    # prod-db-01 (PostgreSQL)
+  - 10.1.3.50    # nfs-01 (file storage)
+  - 52.84.0.0    # CDN (Cloudfront range)
+
+protocols:
+  - HTTPS
+  - PostgreSQL
+
+active_hours:
+  start: 8   # UTC
+  end: 22    # UTC
+
+hourly_volume_mb: 50
+daily_volume_mb: 600
+
+# Typical connection count per hour
+connections_per_hour: 120
+
+# The agent flags deviations from these baselines

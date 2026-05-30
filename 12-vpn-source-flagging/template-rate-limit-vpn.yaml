@@ -1,0 +1,36 @@
+# Rate-limit template for VPN-sourced traffic on login endpoints
+# Applied to nginx/HAProxy via GitOps
+
+rate_limit:
+  zone_name: "vpn_login_throttle"
+  match:
+    source: "@vpn_ip_set"
+    endpoints:
+      - /auth/login
+      - /auth/token
+      - /api/v1/login
+  rate: 3r/m
+  burst: 5
+  action: reject_429
+  log: true
+
+# nginx snippet the GitOps pipeline would render:
+#
+# geo $is_vpn {
+#     default 0;
+#     # ranges from vpn-providers.yaml
+#     185.230.126.0/24 1;
+#     37.120.131.0/24  1;
+# }
+#
+# map $is_vpn $vpn_limit_key {
+#     1 $binary_remote_addr;
+#     0 "";
+# }
+#
+# limit_req_zone $vpn_limit_key zone=vpn_login:10m rate=3r/m;
+#
+# location /auth/login {
+#     limit_req zone=vpn_login burst=5 nodelay;
+#     proxy_pass http://auth_backend;
+# }

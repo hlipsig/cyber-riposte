@@ -1,0 +1,31 @@
+# Endpoint sensitivity classification
+# Determines the response level when VPN-sourced traffic hits each endpoint.
+
+levels:
+  - response: block
+    description: "Drop traffic entirely — no legitimate VPN use expected"
+    endpoints:
+      - "/admin"
+      - "/admin/"
+      - "/internal/api"
+      - "/.well-known/admin"
+
+  - response: rate_limit
+    description: "Throttle to 3 req/min — limit credential stuffing velocity"
+    endpoints:
+      - "/auth/login"
+      - "/auth/token"
+      - "/api/v1/login"
+      - "/oauth/token"
+
+  - response: challenge
+    description: "Require CAPTCHA or step-up auth"
+    endpoints:
+      - "/account/settings"
+      - "/account/password"
+      - "/api/v1/user/update"
+
+  - response: log
+    description: "Tag and log for analysis — no active intervention"
+    endpoints:
+      - "/"  # default for everything else
