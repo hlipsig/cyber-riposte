@@ -1,0 +1,133 @@
+# PostgreSQL deployment for audit log persistence (Phase 3)
+# For production, consider using CrunchyData Postgres Operator instead
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: cyber-riposte
+type: Opaque
+stringData:
+  POSTGRES_USER: mirror_agent
+  POSTGRES_PASSWORD: changeme  # Change in production!
+  POSTGRES_DB: mirror_audit
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: cyber-riposte
+data:
+  init.sql: |
+    -- Schema loaded from db/schema.sql during deployment
+    -- See db/schema.sql for full schema definition
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: cyber-riposte
+  labels:
+    app: postgres
+spec:
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+  selector:
+    app: postgres
+  clusterIP: None  # Headless service for StatefulSet
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: cyber-riposte
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: registry.redhat.io/rhel9/postgresql-15:latest
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRESQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_USER
+        - name: POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_PASSWORD
+        - name: POSTGRESQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_DB
+
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/pgsql/data
+        - name: init-sql
+          mountPath: /opt/app-root/src/postgresql-start/
+          readOnly: true
+
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U $POSTGRESQL_USER -d $POSTGRESQL_DATABASE
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U $POSTGRESQL_USER -d $POSTGRESQL_DATABASE
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+      volumes:
+      - name: init-sql
+        configMap:
+          name: postgres-init
+
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 50Gi

@@ -66,6 +66,18 @@ spec:
         - name: LLM_BACKEND
           value: "rules"  # or "hybrid", "claude", "huggingface"
 
+        # Database configuration (Phase 3)
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: mirror-agent-secrets
+              key: DATABASE_URL
+              optional: false
+        - name: DATABASE_POOL_MIN
+          value: "2"
+        - name: DATABASE_POOL_MAX
+          value: "10"
+
         # Secrets
         - name: SHODAN_API_KEY
           valueFrom:
