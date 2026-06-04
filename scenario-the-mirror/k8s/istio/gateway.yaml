@@ -1,0 +1,49 @@
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: mirror-gateway
+  namespace: cyber-riposte
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "your-domain.com"
+    - "*.your-domain.com"
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: mirror-tls-cert
+    hosts:
+    - "your-domain.com"
+    - "*.your-domain.com"
+---
+# Default VirtualService for legitimate traffic (before attacker detection)
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: mirror-default-routes
+  namespace: cyber-riposte
+spec:
+  hosts:
+  - "your-domain.com"
+  - "*.your-domain.com"
+  gateways:
+  - mirror-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: legitimate-app-service.cyber-riposte.svc.cluster.local
+        port:
+          number: 80

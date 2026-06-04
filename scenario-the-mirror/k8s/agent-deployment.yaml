@@ -1,0 +1,173 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mirror-agent
+  namespace: cyber-riposte
+  labels:
+    app: mirror-agent
+    version: v1
+spec:
+  replicas: 1  # Phase 2 will increase to 3 with Kafka consumer group
+  selector:
+    matchLabels:
+      app: mirror-agent
+  template:
+    metadata:
+      labels:
+        app: mirror-agent
+        version: v1
+    spec:
+      serviceAccountName: mirror-agent
+      containers:
+      - name: mirror-agent
+        image: quay.io/your-org/mirror-agent:latest  # Replace with actual registry
+        imagePullPolicy: Always
+        ports:
+        - name: health
+          containerPort: 8080
+          protocol: TCP
+        env:
+        # Event source configuration
+        - name: EVENT_SOURCE
+          value: "stdin"  # Phase 2: will be "kafka"
+
+        # Honeypot configuration
+        - name: HONEYPOT_IP
+          value: "honeypot-service.cyber-riposte.svc.cluster.local"
+
+        # Configuration paths (mounted from ConfigMap)
+        - name: ACTION_POOL_PATH
+          value: "/etc/mirror/config/action-pool.yaml"
+        - name: USER_AGENTS_PATH
+          value: "/etc/mirror/config/suspicious-user-agents.yaml"
+
+        # Logging configuration
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: LOG_FORMAT
+          value: "json"  # JSON for OpenShift log aggregation
+
+        # Health check port
+        - name: HEALTH_PORT
+          value: "8080"
+
+        # Secrets from Secret
+        - name: SHODAN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mirror-agent-secrets
+              key: SHODAN_API_KEY
+              optional: true
+
+        # Phase 2: Kafka configuration (commented out for Phase 1)
+        # - name: KAFKA_BOOTSTRAP_SERVERS
+        #   value: "kafka:9092"
+        # - name: KAFKA_TOPIC
+        #   value: "suricata-eve-events"
+        # - name: KAFKA_CONSUMER_GROUP
+        #   value: "mirror-agent"
+
+        # Phase 3: Database configuration (commented out for Phase 1)
+        # - name: DATABASE_URL
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: mirror-agent-secrets
+        #       key: DATABASE_URL
+
+        # Phase 8: GitHub/Slack integration (commented out for Phase 1)
+        # - name: GITHUB_TOKEN
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: mirror-agent-secrets
+        #       key: GITHUB_TOKEN
+        #       optional: true
+        # - name: GITHUB_REPO
+        #   value: "your-org/security-incidents"
+        # - name: SLACK_WEBHOOK_URL
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: mirror-agent-secrets
+        #       key: SLACK_WEBHOOK_URL
+        #       optional: true
+
+        # Liveness probe - is the process running?
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Readiness probe - is the agent ready to process events?
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        volumeMounts:
+        # ConfigMaps
+        - name: config
+          mountPath: /etc/mirror/config
+          readOnly: true
+
+        # Persistent volume for audit logs and evidence (Phase 1)
+        # Phase 3: will be replaced by PostgreSQL
+        - name: audit-logs
+          mountPath: /var/log/cyber-riposte
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+
+      volumes:
+      # ConfigMap with action pool and user-agent signatures
+      - name: config
+        configMap:
+          name: mirror-agent-config
+          items:
+          - key: action-pool.yaml
+            path: action-pool.yaml
+          - key: suspicious-user-agents.yaml
+            path: suspicious-user-agents.yaml
+
+      # PersistentVolumeClaim for audit logs and evidence
+      # Phase 3: will be replaced by PostgreSQL
+      - name: audit-logs
+        persistentVolumeClaim:
+          claimName: mirror-agent-audit-pvc
+
+      restartPolicy: Always
+
+      # Affinity: prefer spreading across nodes for HA (Phase 2+)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - mirror-agent
+              topologyKey: kubernetes.io/hostname

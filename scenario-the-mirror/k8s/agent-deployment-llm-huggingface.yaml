@@ -1,0 +1,139 @@
+# Example deployment with Hugging Face local LLM backend (requires GPU)
+# This is a variant of agent-deployment.yaml with Hugging Face GPU configuration
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mirror-agent-llm-hf
+  namespace: cyber-riposte
+  labels:
+    app: mirror-agent
+    llm: huggingface
+spec:
+  replicas: 1  # GPU-based, typically 1 replica
+  selector:
+    matchLabels:
+      app: mirror-agent
+      llm: huggingface
+  template:
+    metadata:
+      labels:
+        app: mirror-agent
+        llm: huggingface
+    spec:
+      serviceAccountName: mirror-agent
+      containers:
+      - name: mirror-agent
+        image: quay.io/your-org/mirror-agent:llm-latest
+        imagePullPolicy: Always
+        ports:
+        - name: health
+          containerPort: 8080
+        env:
+        # Event source
+        - name: EVENT_SOURCE
+          value: "stdin"
+
+        # LLM Configuration - Hugging Face Local
+        - name: LLM_BACKEND
+          value: "hybrid"  # Options: rules, huggingface, hybrid, auto
+        - name: HF_MODEL
+          value: "meta-llama/Llama-3.1-8B-Instruct"  # Recommended model
+        - name: HF_DEVICE
+          value: "cuda"  # Use GPU (requires GPU node)
+        - name: HF_USE_API
+          value: "false"  # Local inference, not API
+
+        # Hugging Face API token (optional, for gated models)
+        - name: HF_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: mirror-agent-secrets
+              key: HF_API_TOKEN
+              optional: true
+
+        # Other configuration
+        - name: HONEYPOT_IP
+          value: "honeypot-service.cyber-riposte.svc.cluster.local"
+        - name: ACTION_POOL_PATH
+          value: "/etc/mirror/config/action-pool.yaml"
+        - name: USER_AGENTS_PATH
+          value: "/etc/mirror/config/suspicious-user-agents.yaml"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: LOG_FORMAT
+          value: "json"
+
+        # OSINT API keys
+        - name: SHODAN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mirror-agent-secrets
+              key: SHODAN_API_KEY
+              optional: true
+
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 60  # Longer for model loading
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 30  # Wait for model to load
+          periodSeconds: 5
+
+        resources:
+          requests:
+            memory: "16Gi"  # LLama 3.1 8B needs ~10-12GB
+            cpu: "4"
+            nvidia.com/gpu: 1  # Request 1 GPU
+          limits:
+            memory: "24Gi"
+            cpu: "8"
+            nvidia.com/gpu: 1
+
+        volumeMounts:
+        - name: config
+          mountPath: /etc/mirror/config
+          readOnly: true
+        - name: audit-logs
+          mountPath: /var/log/cyber-riposte
+        # Model cache (optional, speeds up restarts)
+        - name: hf-cache
+          mountPath: /root/.cache/huggingface
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+
+      volumes:
+      - name: config
+        configMap:
+          name: mirror-agent-config
+      - name: audit-logs
+        persistentVolumeClaim:
+          claimName: mirror-agent-audit-pvc
+      # PVC for model cache (recommended to avoid re-downloading)
+      - name: hf-cache
+        persistentVolumeClaim:
+          claimName: huggingface-model-cache
+
+      # Node selector for GPU nodes
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+
+      # Toleration for GPU taints
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+
+      restartPolicy: Always

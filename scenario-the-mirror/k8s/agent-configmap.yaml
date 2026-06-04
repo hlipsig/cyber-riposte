@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mirror-agent-config
+  namespace: cyber-riposte
+  labels:
+    app: mirror-agent
+data:
+  action-pool.yaml: |
+$(sed 's/^/    /' action-pool.yaml)
+  suspicious-user-agents.yaml: |
+$(sed 's/^/    /' suspicious-user-agents.yaml)

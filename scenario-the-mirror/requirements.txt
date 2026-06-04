@@ -1,0 +1,49 @@
+# Core dependencies (already in use)
+pyyaml>=6.0
+
+# Phase 1: Containerization
+flask>=3.0.0
+
+# LLM Support (Optional - install based on LLM_BACKEND choice)
+# For Claude API:
+anthropic>=0.39.0
+
+# For Hugging Face local inference:
+transformers>=4.45.0
+torch>=2.1.0
+accelerate>=0.24.0
+
+# For Hugging Face API:
+huggingface_hub>=0.24.0
+
+# Phase 2: Kafka integration
+kafka-python>=2.0.2
+
+# Phase 3: Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+alembic>=1.13.0
+
+# Phase 4: Kubernetes API
+kubernetes>=28.0.0
+
+# Phase 6: OSINT resilience
+redis>=5.0.0
+circuitbreaker>=2.0.0
+
+# Phase 7: Observability
+prometheus-client>=0.19.0
+opentelemetry-api>=1.22.0
+opentelemetry-sdk>=1.22.0
+opentelemetry-instrumentation-flask>=0.43b0
+
+# Phase 8: GitHub integration
+PyGithub>=2.1.1
+slack-sdk>=3.26.0
+
+# Phase 9: Hot-reload
+watchdog>=4.0.0
+
+# Testing
+pytest>=7.4.0
+pytest-mock>=3.12.0

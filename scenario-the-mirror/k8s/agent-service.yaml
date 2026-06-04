@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mirror-agent
+  namespace: cyber-riposte
+  labels:
+    app: mirror-agent
+spec:
+  selector:
+    app: mirror-agent
+  ports:
+  - name: health
+    port: 8080
+    targetPort: health
+    protocol: TCP
+  type: ClusterIP

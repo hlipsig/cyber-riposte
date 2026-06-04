@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Kubernetes
+k8s/
+
+# Documentation
+*.md
+!README.md
+TALK.md
+DEPLOYMENT.md
+PHASE2-LLM.md
+
+# Examples and tests
+examples/
+tests/
+.github/
+
+# Honeypot (will be separate deployment)
+honeypot/
+
+# Local development
+*.log
+dossier-*.md
