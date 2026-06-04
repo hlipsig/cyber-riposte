@@ -212,7 +212,6 @@ def process_event(event, pool, audit, mirrored):
 def run_stdin_mode():
     """
     Phase 1: Read events from stdin (for testing and compatibility).
-    Phase 2 will replace this with Kafka consumer.
     """
     logger.info("Starting Mirror agent in stdin mode...")
     logger.info(f"Action pool: {Config.ACTION_POOL_PATH}")
@@ -242,6 +241,57 @@ def run_stdin_mode():
             health_status["incidents_processed"] += 1
 
 
+def run_kafka_mode():
+    """
+    Phase 2: Read events from Kafka (distributed message queue).
+    """
+    logger.info("Starting Mirror agent in Kafka mode...")
+    logger.info(f"Kafka brokers: {Config.KAFKA_BOOTSTRAP_SERVERS}")
+    logger.info(f"Topic: {Config.KAFKA_TOPIC}")
+    logger.info(f"Consumer group: {Config.KAFKA_CONSUMER_GROUP}")
+    logger.info(f"Action pool: {Config.ACTION_POOL_PATH}")
+
+    # Validate configuration
+    warnings = Config.validate()
+    for warning in warnings:
+        logger.warning(warning)
+
+    # Import Kafka consumer (only when needed)
+    try:
+        from agent.kafka_consumer import MirrorKafkaConsumer
+    except ImportError:
+        logger.error("kafka-python not installed. Install with: pip install kafka-python")
+        sys.exit(1)
+
+    pool = ActionPool()
+    audit = AuditLog(Config.AUDIT_LOG_PATH)
+    mirrored = set()
+
+    # Create Kafka consumer
+    consumer = MirrorKafkaConsumer()
+
+    if not consumer.connect():
+        logger.error("Failed to connect to Kafka")
+        sys.exit(1)
+
+    # Mark as ready
+    health_status["ready"] = True
+    logger.info("Agent ready to consume events from Kafka")
+
+    # Define event handler
+    def handle_kafka_event(event: Dict[str, Any]):
+        """Handle event from Kafka."""
+        if process_event(event, pool, audit, mirrored):
+            health_status["incidents_processed"] += 1
+
+    # Start consuming
+    try:
+        consumer.consume(handle_kafka_event)
+    finally:
+        stats = consumer.get_stats()
+        logger.info(f"Kafka consumer stats: {stats}")
+
+
 def main():
     """Main entry point."""
     setup_logging()
@@ -260,9 +310,7 @@ def main():
     if Config.EVENT_SOURCE == "stdin":
         run_stdin_mode()
     elif Config.EVENT_SOURCE == "kafka":
-        # Phase 2: will implement Kafka consumer here
-        logger.error("Kafka mode not yet implemented (Phase 2)")
-        sys.exit(1)
+        run_kafka_mode()
     else:
         logger.error(f"Unknown event source: {Config.EVENT_SOURCE}")
         sys.exit(1)

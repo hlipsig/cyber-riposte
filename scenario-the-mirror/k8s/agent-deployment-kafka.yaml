@@ -1,0 +1,156 @@
+# Agent deployment with Kafka event source (Phase 2)
+# This replaces stdin with distributed message queue
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mirror-agent-kafka
+  namespace: cyber-riposte
+  labels:
+    app: mirror-agent
+    mode: kafka
+spec:
+  replicas: 3  # Multiple replicas with consumer group
+  selector:
+    matchLabels:
+      app: mirror-agent
+      mode: kafka
+  template:
+    metadata:
+      labels:
+        app: mirror-agent
+        mode: kafka
+    spec:
+      serviceAccountName: mirror-agent
+      containers:
+      - name: mirror-agent
+        image: quay.io/your-org/mirror-agent:latest
+        imagePullPolicy: Always
+        ports:
+        - name: health
+          containerPort: 8080
+        env:
+        # Event source - Kafka mode
+        - name: EVENT_SOURCE
+          value: "kafka"
+
+        # Kafka configuration
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: KAFKA_TOPIC
+          value: "suricata-eve-events"
+        - name: KAFKA_CONSUMER_GROUP
+          value: "mirror-agent"
+
+        # Honeypot configuration
+        - name: HONEYPOT_IP
+          value: "honeypot-service.cyber-riposte.svc.cluster.local"
+
+        # Configuration paths
+        - name: ACTION_POOL_PATH
+          value: "/etc/mirror/config/action-pool.yaml"
+        - name: USER_AGENTS_PATH
+          value: "/etc/mirror/config/suspicious-user-agents.yaml"
+
+        # Logging
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: LOG_FORMAT
+          value: "json"
+
+        # Health check port
+        - name: HEALTH_PORT
+          value: "8080"
+
+        # LLM backend (optional)
+        - name: LLM_BACKEND
+          value: "rules"  # or "hybrid", "claude", "huggingface"
+
+        # Secrets
+        - name: SHODAN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mirror-agent-secrets
+              key: SHODAN_API_KEY
+              optional: true
+
+        # LLM secrets (if using LLM backend)
+        # - name: ANTHROPIC_API_KEY
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: mirror-agent-secrets
+        #       key: ANTHROPIC_API_KEY
+        #       optional: true
+
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+        volumeMounts:
+        - name: config
+          mountPath: /etc/mirror/config
+          readOnly: true
+        - name: audit-logs
+          mountPath: /var/log/cyber-riposte
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+
+      volumes:
+      - name: config
+        configMap:
+          name: mirror-agent-config
+          items:
+          - key: action-pool.yaml
+            path: action-pool.yaml
+          - key: suspicious-user-agents.yaml
+            path: suspicious-user-agents.yaml
+
+      - name: audit-logs
+        persistentVolumeClaim:
+          claimName: mirror-agent-audit-pvc
+
+      restartPolicy: Always
+
+      # Pod anti-affinity: spread across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - mirror-agent
+              topologyKey: kubernetes.io/hostname
