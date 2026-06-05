@@ -1,0 +1,146 @@
+# Glastopf HTTP Honeypot Deployment (Phase 5)
+# Web application honeypot that emulates vulnerabilities and logs attacks
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: glastopf-config
+  namespace: cyber-riposte
+data:
+  glastopf.cfg: |
+    [webserver]
+    host = 0.0.0.0
+    port = 8080
+    uid = 1000
+    gid = 1000
+
+    [logging]
+    log_dir = /opt/glastopf/log
+    verbose = true
+
+    [dork_db]
+    enabled = true
+    pattern = *
+
+    [hpfeed]
+    enabled = false
+
+    [taxii]
+    enabled = false
+
+    [main_database]
+    enabled = true
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: glastopf
+  namespace: cyber-riposte
+  labels:
+    app: glastopf
+    component: honeypot
+spec:
+  serviceName: glastopf
+  replicas: 1
+  selector:
+    matchLabels:
+      app: glastopf
+  template:
+    metadata:
+      labels:
+        app: glastopf
+        component: honeypot
+    spec:
+      containers:
+      - name: glastopf
+        image: dinotools/glastopf:latest
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+
+        env:
+        - name: GLASTOPF_LOG_DIR
+          value: "/opt/glastopf/log"
+
+        volumeMounts:
+        - name: glastopf-logs
+          mountPath: /opt/glastopf/log
+        - name: glastopf-data
+          mountPath: /opt/glastopf/db
+        - name: glastopf-config
+          mountPath: /opt/glastopf/glastopf.cfg
+          subPath: glastopf.cfg
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      volumes:
+      - name: glastopf-config
+        configMap:
+          name: glastopf-config
+
+  volumeClaimTemplates:
+  - metadata:
+      name: glastopf-logs
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+
+  - metadata:
+      name: glastopf-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 5Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: glastopf
+  namespace: cyber-riposte
+  labels:
+    app: glastopf
+    component: honeypot
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: glastopf

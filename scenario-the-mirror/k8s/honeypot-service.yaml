@@ -1,0 +1,68 @@
+# Unified Honeypot Service (Phase 5)
+# This is the destination for redirected attacker traffic from Istio VirtualServices
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: honeypot-service
+  namespace: cyber-riposte
+  labels:
+    app: honeypot
+    component: honeypot
+spec:
+  type: ClusterIP  # Internal only, accessed via Istio VirtualService
+  ports:
+  # HTTP traffic → Glastopf
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+
+  # SSH traffic → Cowrie
+  - port: 22
+    targetPort: 2222
+    protocol: TCP
+    name: ssh
+
+  # Telnet traffic → Cowrie
+  - port: 23
+    targetPort: 2223
+    protocol: TCP
+    name: telnet
+
+  selector:
+    component: honeypot  # Matches both Cowrie and Glastopf pods
+
+---
+# Optional: Separate services if you want protocol-specific routing
+# Use these if you want Istio to route HTTP → Glastopf, SSH → Cowrie separately
+
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: honeypot-http
+#   namespace: cyber-riposte
+# spec:
+#   type: ClusterIP
+#   ports:
+#   - port: 8080
+#     targetPort: 8080
+#     name: http
+#   selector:
+#     app: glastopf
+#
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: honeypot-ssh
+#   namespace: cyber-riposte
+# spec:
+#   type: ClusterIP
+#   ports:
+#   - port: 22
+#     targetPort: 2222
+#     name: ssh
+#   selector:
+#     app: cowrie

@@ -1,0 +1,107 @@
+# PCAP Capture DaemonSet (Phase 5)
+# Captures network traffic to honeypots for forensic analysis
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcpdump-config
+  namespace: cyber-riposte
+data:
+  capture.sh: |
+    #!/bin/bash
+    # PCAP capture script - captures traffic to honeypot pods
+
+    PCAP_DIR="/pcap"
+    ROTATION_INTERVAL=3600  # 1 hour
+    FILTER="dst port 8080 or dst port 2222 or dst port 2223"
+
+    echo "Starting PCAP capture: $FILTER"
+
+    while true; do
+      TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+      PCAP_FILE="$PCAP_DIR/honeypot-$TIMESTAMP.pcap"
+
+      echo "Capturing to: $PCAP_FILE"
+
+      # Capture for ROTATION_INTERVAL seconds
+      timeout $ROTATION_INTERVAL tcpdump -i any -w "$PCAP_FILE" "$FILTER"
+
+      # Compress old PCAP
+      if [ -f "$PCAP_FILE" ]; then
+        gzip "$PCAP_FILE"
+        echo "Rotated: $PCAP_FILE.gz"
+      fi
+
+      # Delete PCAP files older than 7 days
+      find "$PCAP_DIR" -name "*.pcap.gz" -mtime +7 -delete
+    done
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: pcap-capture
+  namespace: cyber-riposte
+  labels:
+    app: pcap-capture
+spec:
+  selector:
+    matchLabels:
+      app: pcap-capture
+  template:
+    metadata:
+      labels:
+        app: pcap-capture
+    spec:
+      # Use host network to capture all traffic
+      hostNetwork: true
+      hostPID: true
+
+      containers:
+      - name: tcpdump
+        image: nicolaka/netshoot:latest
+        command: ["/bin/bash", "/config/capture.sh"]
+
+        volumeMounts:
+        - name: tcpdump-config
+          mountPath: /config
+          readOnly: true
+        - name: pcap-storage
+          mountPath: /pcap
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        securityContext:
+          # tcpdump requires CAP_NET_RAW and CAP_NET_ADMIN
+          capabilities:
+            add:
+            - NET_RAW
+            - NET_ADMIN
+          privileged: false
+
+      volumes:
+      - name: tcpdump-config
+        configMap:
+          name: tcpdump-config
+          defaultMode: 0755
+
+      - name: pcap-storage
+        hostPath:
+          path: /var/log/cyber-riposte/pcap
+          type: DirectoryOrCreate
+
+      # Node selector (optional - only capture on specific nodes)
+      # nodeSelector:
+      #   honeypot-capture: "true"
+
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule

@@ -1,0 +1,156 @@
+# Cowrie SSH Honeypot Deployment (Phase 5)
+# Medium-interaction SSH honeypot that logs attacker commands and session activity
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cowrie-config
+  namespace: cyber-riposte
+data:
+  cowrie.cfg: |
+    [honeypot]
+    hostname = web-server-01
+    log_path = /cowrie/var/log/cowrie
+    download_path = /cowrie/var/downloads
+    contents_path = /cowrie/honeyfs
+
+    # Fake filesystem
+    filesystem_file = /cowrie/share/cowrie/fs.pickle
+
+    # SSH settings
+    ssh_addr = 0.0.0.0
+    ssh_port = 2222
+
+    # Authentication
+    auth_class = AuthRandom
+    backend = shell
+
+    # Timezone
+    timezone = UTC
+
+    [output_jsonlog]
+    logfile = /cowrie/var/log/cowrie/cowrie.json
+
+    [output_elasticsearch]
+    enabled = false
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cowrie
+  namespace: cyber-riposte
+  labels:
+    app: cowrie
+    component: honeypot
+spec:
+  serviceName: cowrie
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cowrie
+  template:
+    metadata:
+      labels:
+        app: cowrie
+        component: honeypot
+    spec:
+      containers:
+      - name: cowrie
+        image: cowrie/cowrie:latest
+        ports:
+        - containerPort: 2222
+          name: ssh
+          protocol: TCP
+        - containerPort: 2223
+          name: telnet
+          protocol: TCP
+
+        env:
+        - name: COWRIE_LOG_PATH
+          value: "/cowrie/var/log/cowrie"
+        - name: COWRIE_DOWNLOAD_PATH
+          value: "/cowrie/var/downloads"
+
+        volumeMounts:
+        - name: cowrie-logs
+          mountPath: /cowrie/var/log/cowrie
+        - name: cowrie-downloads
+          mountPath: /cowrie/var/downloads
+        - name: cowrie-config
+          mountPath: /cowrie/etc/cowrie.cfg
+          subPath: cowrie.cfg
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        livenessProbe:
+          tcpSocket:
+            port: ssh
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+        readinessProbe:
+          tcpSocket:
+            port: ssh
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      volumes:
+      - name: cowrie-config
+        configMap:
+          name: cowrie-config
+
+  volumeClaimTemplates:
+  - metadata:
+      name: cowrie-logs
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+
+  - metadata:
+      name: cowrie-downloads
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 5Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cowrie
+  namespace: cyber-riposte
+  labels:
+    app: cowrie
+    component: honeypot
+spec:
+  type: ClusterIP
+  ports:
+  - port: 2222
+    targetPort: 2222
+    protocol: TCP
+    name: ssh
+  - port: 2223
+    targetPort: 2223
+    protocol: TCP
+    name: telnet
+  selector:
+    app: cowrie

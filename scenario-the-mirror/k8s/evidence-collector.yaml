@@ -1,0 +1,154 @@
+# Evidence Collector (Phase 5)
+# Sidecar that monitors honeypot logs and uploads to database/storage
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evidence-collector-script
+  namespace: cyber-riposte
+data:
+  collect.sh: |
+    #!/bin/bash
+    # Evidence collector - monitors honeypot logs and uploads to database
+
+    COWRIE_LOG="/cowrie-logs/cowrie.json"
+    GLASTOPF_LOG="/glastopf-logs/glastopf.log"
+    EVIDENCE_DIR="/evidence"
+    UPLOAD_INTERVAL=60  # seconds
+
+    echo "Evidence collector started"
+
+    while true; do
+      # Process Cowrie logs
+      if [ -f "$COWRIE_LOG" ]; then
+        # Find new entries since last check
+        NEW_ENTRIES=$(tail -n 100 "$COWRIE_LOG")
+
+        if [ ! -z "$NEW_ENTRIES" ]; then
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          EVIDENCE_FILE="$EVIDENCE_DIR/cowrie-$TIMESTAMP.json"
+
+          echo "$NEW_ENTRIES" > "$EVIDENCE_FILE"
+          echo "Collected Cowrie evidence: $EVIDENCE_FILE"
+
+          # TODO: Upload to database (Phase 5 - database integration)
+          # python3 /scripts/upload_evidence.py "$EVIDENCE_FILE" cowrie
+        fi
+      fi
+
+      # Process Glastopf logs
+      if [ -f "$GLASTOPF_LOG" ]; then
+        # Find new entries since last check
+        NEW_ENTRIES=$(tail -n 100 "$GLASTOPF_LOG")
+
+        if [ ! -z "$NEW_ENTRIES" ]; then
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          EVIDENCE_FILE="$EVIDENCE_DIR/glastopf-$TIMESTAMP.log"
+
+          echo "$NEW_ENTRIES" > "$EVIDENCE_FILE"
+          echo "Collected Glastopf evidence: $EVIDENCE_FILE"
+
+          # TODO: Upload to database
+          # python3 /scripts/upload_evidence.py "$EVIDENCE_FILE" glastopf
+        fi
+      fi
+
+      sleep $UPLOAD_INTERVAL
+    done
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evidence-collector
+  namespace: cyber-riposte
+  labels:
+    app: evidence-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: evidence-collector
+  template:
+    metadata:
+      labels:
+        app: evidence-collector
+    spec:
+      serviceAccountName: mirror-agent  # Reuse agent SA for database access
+
+      containers:
+      - name: collector
+        image: registry.access.redhat.com/ubi9/ubi:latest
+        command: ["/bin/bash", "/scripts/collect.sh"]
+
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: mirror-agent-secrets
+              key: DATABASE_URL
+              optional: false
+
+        volumeMounts:
+        - name: collector-script
+          mountPath: /scripts
+          readOnly: true
+        - name: cowrie-logs
+          mountPath: /cowrie-logs
+          readOnly: true
+        - name: glastopf-logs
+          mountPath: /glastopf-logs
+          readOnly: true
+        - name: evidence-storage
+          mountPath: /evidence
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+
+      volumes:
+      - name: collector-script
+        configMap:
+          name: evidence-collector-script
+          defaultMode: 0755
+
+      # Shared PVCs with honeypots (read-only access)
+      - name: cowrie-logs
+        persistentVolumeClaim:
+          claimName: cowrie-logs-cowrie-0  # StatefulSet PVC name
+          readOnly: true
+
+      - name: glastopf-logs
+        persistentVolumeClaim:
+          claimName: glastopf-logs-glastopf-0  # StatefulSet PVC name
+          readOnly: true
+
+      - name: evidence-storage
+        persistentVolumeClaim:
+          claimName: evidence-storage
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: evidence-storage
+  namespace: cyber-riposte
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
