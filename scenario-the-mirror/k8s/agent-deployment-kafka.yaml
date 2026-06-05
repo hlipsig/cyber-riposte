@@ -78,6 +78,10 @@ spec:
         - name: DATABASE_POOL_MAX
           value: "10"
 
+        # Redis configuration (Phase 6)
+        - name: REDIS_URL
+          value: "redis://redis:6379/0"
+
         # Secrets
         - name: SHODAN_API_KEY
           valueFrom:

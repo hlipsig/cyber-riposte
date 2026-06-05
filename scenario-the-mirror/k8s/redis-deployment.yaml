@@ -1,0 +1,124 @@
+# Redis Deployment for OSINT Caching (Phase 6)
+# Caches WHOIS, rDNS, Shodan, CT results to reduce API calls
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: cyber-riposte
+data:
+  redis.conf: |
+    # Redis configuration for OSINT caching
+
+    # Network
+    bind 0.0.0.0
+    port 6379
+    protected-mode no
+
+    # Memory
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru  # Evict least recently used keys
+
+    # Persistence (disabled for cache-only use)
+    save ""
+    appendonly no
+
+    # Logging
+    loglevel notice
+    logfile ""
+
+    # Performance
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: cyber-riposte
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+
+        ports:
+        - containerPort: 6379
+          name: redis
+          protocol: TCP
+
+        volumeMounts:
+        - name: redis-config
+          mountPath: /etc/redis
+          readOnly: true
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 999  # redis user
+          capabilities:
+            drop:
+            - ALL
+
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: cyber-riposte
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  selector:
+    app: redis

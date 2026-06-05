@@ -273,27 +273,94 @@ def execute_redirect(attacker_ip, pool, audit, incident_id, detection):
 
 
 def execute_osint(attacker_ip, pool, audit, incident_id, detection):
-    """Tier 1: run passive OSINT."""
+    """
+    Tier 1: run passive OSINT.
+
+    Phase 6: Uses Redis caching and rate limiting to prevent API quota exhaustion.
+    """
     action_id = "run-osint"
     can_exec, reason = pool.can_execute(action_id)
     if not can_exec:
         logger.warning(f"SKIPPED {action_id}: {reason}")
         return None
 
+    # Phase 6: Import caching and rate limiting
+    try:
+        from agent.osint_cache import get_osint_cache
+        from agent.rate_limiter import get_osint_rate_limiter
+
+        cache = get_osint_cache()
+        rate_limiter = get_osint_rate_limiter()
+        use_resilience = True
+    except ImportError as e:
+        logger.warning(f"OSINT resilience modules not available: {e}")
+        cache = None
+        rate_limiter = None
+        use_resilience = False
+
     osint_data = {
         "target_ip": attacker_ip,
         "collected_at": datetime.now(timezone.utc).isoformat(),
         "modules": {},
+        "cache_stats": {},
+        "rate_limited": [],
     }
 
-    # Run OSINT modules
+    # Run OSINT modules with caching and rate limiting
     logger.info(f"Running OSINT on {attacker_ip}...")
-    osint_data["modules"]["whois"] = whois_lookup(attacker_ip)
-    osint_data["modules"]["reverse_dns"] = reverse_dns(attacker_ip)
-    osint_data["modules"]["shodan"] = shodan_lookup(attacker_ip)
-    osint_data["modules"]["cert_transparency"] = ct_lookup(attacker_ip)
 
-    # Save evidence files
+    # Helper function to run module with resilience
+    def run_module(name: str, func: Callable, *args, **kwargs):
+        # Check cache first
+        if cache:
+            cached = cache.get(name, attacker_ip)
+            if cached:
+                logger.info(f"OSINT cache HIT: {name}")
+                osint_data["cache_stats"][name] = "hit"
+                return cached
+            osint_data["cache_stats"][name] = "miss"
+
+        # Check rate limit
+        if rate_limiter and not rate_limiter.allow(name):
+            wait = rate_limiter.wait_time(name)
+            logger.warning(f"OSINT rate limited: {name} (wait: {wait:.1f}s)")
+            osint_data["rate_limited"].append(name)
+            return {"error": "rate_limited", "wait_time": wait}
+
+        # Execute lookup
+        try:
+            result = func(*args, **kwargs)
+
+            # Store in cache
+            if cache and result:
+                cache.set(name, attacker_ip, result)
+
+            return result
+        except Exception as e:
+            logger.error(f"OSINT module {name} failed: {e}")
+            return {"error": str(e)}
+
+    osint_data["modules"]["whois"] = run_module("whois", whois_lookup, attacker_ip)
+    osint_data["modules"]["reverse_dns"] = run_module("rdns", reverse_dns, attacker_ip)
+    osint_data["modules"]["shodan"] = run_module("shodan", shodan_lookup, attacker_ip)
+    osint_data["modules"]["cert_transparency"] = run_module("ct", ct_lookup, attacker_ip)
+
+    # Phase 3: Save evidence to database
+    try:
+        from agent.db import get_db_manager
+        db = get_db_manager()
+
+        for module_name, data in osint_data["modules"].items():
+            if data and "error" not in data:
+                db.add_evidence(
+                    incident_id=incident_id,
+                    evidence_type=module_name,
+                    data=data,
+                )
+    except Exception as e:
+        logger.warning(f"Failed to save OSINT evidence to database: {e}")
+
+    # Phase 1-2: Save evidence files (backward compatibility)
     evidence_dir = Path(Config.EVIDENCE_DIR)
     evidence_dir.mkdir(parents=True, exist_ok=True)
     ip_slug = attacker_ip.replace(".", "-")
@@ -304,6 +371,15 @@ def execute_osint(attacker_ip, pool, audit, incident_id, detection):
         except Exception as e:
             logger.error(f"Failed to write evidence file {evidence_file}: {e}")
 
+    # Determine result based on rate limiting
+    modules_run = len([m for m in osint_data["modules"].values() if "error" not in m])
+    modules_cached = sum(1 for v in osint_data.get("cache_stats", {}).values() if v == "hit")
+    modules_rate_limited = len(osint_data.get("rate_limited", []))
+
+    result_status = "success" if modules_run > 0 else "partial"
+    if modules_rate_limited > 0:
+        result_status = "partial"
+
     audit.record(
         incident_id=incident_id,
         action_id=action_id,
@@ -313,16 +389,24 @@ def execute_osint(attacker_ip, pool, audit, incident_id, detection):
             "source_ip": attacker_ip,
             "modules": ["whois", "reverse_dns", "shodan", "cert_transparency"],
             "passive_only": True,
+            "cached_modules": modules_cached,
+            "rate_limited_modules": modules_rate_limited,
+            "resilience_enabled": use_resilience,
         },
-        result="success",
+        result=result_status,
         justification={
             "trigger": "recon-detected",
             "detection_confidence": detection.get("confidence", 0.97),
             "evidence_refs": [detection.get("timestamp", "")],
             "playbook_rule": action_id,
-            "reasoning": "Standard OSINT collection, all modules passive, within rate limits",
+            "reasoning": f"OSINT collection: {modules_run} modules run, {modules_cached} cached, {modules_rate_limited} rate limited",
         },
-        context={"attacker_ip": attacker_ip, "osint_collected": True},
+        context={
+            "attacker_ip": attacker_ip,
+            "osint_collected": True,
+            "cache_stats": osint_data.get("cache_stats", {}),
+            "rate_limited": osint_data.get("rate_limited", []),
+        },
     )
     pool.mark_executed()
     return osint_data
