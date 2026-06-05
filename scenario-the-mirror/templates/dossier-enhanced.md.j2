@@ -1,0 +1,238 @@
+# Threat Actor Dossier: {{ attacker_ip }}
+
+**Generated**: {{ timestamp }}
+**Incident**: {{ incident_id }}
+
+---
+
+## Network Information
+
+### IP Address Details
+- **Address**: {{ attacker_ip }}
+{% if ip_type -%}
+- **Type**: {{ ip_type }} ({{ ip_class }})
+{%- endif %}
+{% if geo -%}
+- **Geolocation**: {{ geo.city }}, {{ geo.region }}, {{ geo.country }}
+- **Coordinates**: {{ geo.lat }}, {{ geo.lon }}
+{%- endif %}
+
+### Network Owner
+{% if whois -%}
+- **Organization**: {{ whois.org }}
+- **ASN**: AS{{ whois.asn }}
+- **CIDR**: {{ whois.cidr }}
+{%- if whois.registered_date %}
+- **Registered**: {{ whois.registered_date }}
+{%- endif %}
+{%- if whois.updated_date %}
+- **Updated**: {{ whois.updated_date }}
+{%- endif %}
+{%- endif %}
+
+### Contact Information
+{% if whois and whois.abuse_email -%}
+- **Abuse Contact**: {{ whois.abuse_email }}
+{%- endif %}
+{% if whois and whois.tech_email -%}
+- **Technical Contact**: {{ whois.tech_email }}
+{%- endif %}
+
+---
+
+## Reconnaissance Profile
+
+### Reverse DNS
+{% if rdns and rdns.hostname -%}
+- **Hostname**: {{ rdns.hostname }}
+- **Resolved**: {{ rdns.resolved }}
+{%- else %}
+- No PTR record found
+{%- endif %}
+
+### Shodan Intelligence
+{% if shodan and shodan.data -%}
+- **Open Ports**: {{ shodan.ports | join(', ') }}
+- **Services**: {{ shodan.services | join(', ') }}
+{%- if shodan.vulns %}
+- **Vulnerabilities**: {{ shodan.vulns | length }} known CVEs
+{%- endif %}
+- **Last Seen**: {{ shodan.last_update }}
+
+#### Detected Services
+{%- for service in shodan.services_detail %}
+- **Port {{ service.port }}**: {{ service.product }} {{ service.version }}
+  - Banner: `{{ service.banner[:100] }}...`
+{%- endfor %}
+{%- else %}
+- No Shodan data available
+{%- endif %}
+
+### Certificate Transparency
+{% if ct and ct.certificates -%}
+- **Certificates Found**: {{ ct.certificates | length }}
+
+#### Associated Domains
+{%- for cert in ct.certificates[:10] %}
+- {{ cert.common_name }} (Issued: {{ cert.not_before }})
+  - Issuer: {{ cert.issuer }}
+  - Domains: {{ cert.dns_names | join(', ') }}
+{%- endfor %}
+{%- else %}
+- No certificates found
+{%- endif %}
+
+---
+
+## Attack Profile
+
+### Detection Signals
+{% for signal in detection_signals -%}
+#### {{ signal.type }}
+- **Confidence**: {{ signal.confidence }}
+- **Description**: {{ signal.description }}
+- **Evidence**: {{ signal.evidence }}
+{% endfor %}
+
+### Tools Detected
+{% for tool in detected_tools -%}
+- **{{ tool.name }}**{% if tool.version %} ({{ tool.version }}){% endif %}
+  - Category: {{ tool.category }}
+  - Signature: `{{ tool.signature }}`
+{% endfor %}
+
+### Attack Timeline
+{% for event in timeline -%}
+- **{{ event.timestamp }}**: {{ event.action }}
+  - Details: {{ event.details }}
+{% endfor %}
+
+---
+
+## Honeypot Interactions
+
+{% if ssh_sessions -%}
+### SSH Activity (Cowrie)
+- **Sessions**: {{ ssh_sessions | length }}
+- **Credentials Tried**: {{ credential_attempts }}
+- **Commands Executed**: {{ commands_executed }}
+
+#### Session Summary
+{%- for session in ssh_sessions[:5] %}
+- **{{ session.timestamp }}**: Duration {{ session.duration }}s
+  - Username: `{{ session.username }}`
+  - Password: `{{ session.password }}`
+  - Commands: {{ session.commands | join('; ') }}
+{%- endfor %}
+
+#### Top Commands
+{%- for cmd, count in top_commands[:10] %}
+- `{{ cmd }}`: {{ count }} times
+{%- endfor %}
+
+{%- if malware_downloads %}
+#### Malware Downloads
+{%- for malware in malware_downloads %}
+- **{{ malware.filename }}**
+  - Size: {{ malware.size }} bytes
+  - SHA256: `{{ malware.sha256 }}`
+  - URL: {{ malware.url }}
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+
+{% if http_requests -%}
+### HTTP Activity (Glastopf)
+- **Requests**: {{ http_requests | length }}
+- **Unique URLs**: {{ unique_urls }}
+- **Attack Vectors**: {{ attack_vectors | join(', ') }}
+
+#### Request Summary
+{%- for req in http_requests[:10] %}
+- **{{ req.timestamp }}**: {{ req.method }} {{ req.url }}
+  - User-Agent: `{{ req.user_agent[:50] }}...`
+  - Attack Type: {{ req.attack_type }}
+{%- endfor %}
+
+#### Attack Payloads
+{%- for payload in attack_payloads[:5] %}
+- **{{ payload.type }}**: `{{ payload.data[:100] }}...`
+{%- endfor %}
+{%- endif %}
+
+---
+
+## Threat Assessment
+
+### Risk Score: {{ risk_score }}/10
+
+**Factors**:
+{% for factor in risk_factors -%}
+- {{ factor.name }}: {{ factor.score }}/10
+  - Reasoning: {{ factor.reasoning }}
+{% endfor %}
+
+### Indicators of Compromise (IOCs)
+
+#### Network IOCs
+- IP: {{ attacker_ip }}
+{% if rdns and rdns.hostname -%}
+- Hostname: {{ rdns.hostname }}
+{%- endif %}
+{% for domain in associated_domains -%}
+- Domain: {{ domain }}
+{% endfor %}
+
+#### Behavioral IOCs
+{% for ioc in behavioral_iocs -%}
+- {{ ioc }}
+{% endfor %}
+
+### Attribution Confidence: {{ attribution_confidence }}
+
+{% if attribution_notes -%}
+**Notes**: {{ attribution_notes }}
+{%- endif %}
+
+---
+
+## Recommended Actions
+
+### Immediate
+{% for action in immediate_actions -%}
+- [ ] {{ action }}
+{% endfor %}
+
+### Short-term
+{% for action in shortterm_actions -%}
+- [ ] {{ action }}
+{% endfor %}
+
+### Long-term
+{% for action in longterm_actions -%}
+- [ ] {{ action }}
+{% endfor %}
+
+---
+
+## References
+
+### OSINT Sources
+{% if whois_source -%}
+- WHOIS: {{ whois_source }}
+{%- endif %}
+- Shodan: https://www.shodan.io/host/{{ attacker_ip }}
+- VirusTotal: https://www.virustotal.com/gui/ip-address/{{ attacker_ip }}
+- AbuseIPDB: https://www.abuseipdb.com/check/{{ attacker_ip }}
+- GreyNoise: https://www.greynoise.io/viz/ip/{{ attacker_ip }}
+
+### Related Incidents
+{% for incident in related_incidents -%}
+- [{{ incident.id }}](./{{ incident.id }}.md) - {{ incident.signature }} ({{ incident.date }})
+{% endfor %}
+
+---
+
+**Agent**: The Mirror v{{ agent_version }}
+**Database**: {{ database_entries }} total entries
+**Cache Hit Rate**: {{ cache_hit_rate }}%

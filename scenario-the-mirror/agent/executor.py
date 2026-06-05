@@ -557,4 +557,139 @@ def generate_postmortem(incident_id, attacker_ip, detection, osint_data, audit):
         context={"attacker_ip": attacker_ip},
     )
 
+    # Phase 8: Generate incident report templates
+    try:
+        from agent.template_generator import IncidentReportGenerator
+
+        generator = IncidentReportGenerator()
+
+        # Prepare incident data for templates
+        incident_data = {
+            "incident_id": incident_id,
+            "attacker_ip": attacker_ip,
+            "attacker_ip_slug": attacker_ip.replace(".", "-"),
+            "detection_signature": detection.get("signature", "Unknown"),
+            "first_seen": detection.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            "confidence": detection.get("confidence", 0.97),
+            "summary": f"Reconnaissance activity detected from {attacker_ip}. " +
+                       f"Signature: {detection.get('signature', 'Unknown')}. " +
+                       f"Confidence: {detection.get('confidence', 0.97):.2f}",
+            "osint": {
+                "whois": osint_data["modules"].get("whois", {}),
+                "rdns": osint_data["modules"].get("reverse_dns", {}),
+                "shodan": osint_data["modules"].get("shodan", {}),
+                "ct": osint_data["modules"].get("cert_transparency", {}),
+            },
+            "detection_signals": [
+                {
+                    "type": detection.get("signature", "Unknown"),
+                    "description": f"Detection confidence: {detection.get('confidence', 0.97):.2f}",
+                    "confidence": detection.get("confidence", 0.97),
+                }
+            ],
+            "actions": [
+                {
+                    "name": e["action"]["name"],
+                    "timestamp": e["timestamp"],
+                    "result": e["action"]["result"],
+                    "success": e["action"]["result"] == "success",
+                    "parameters": e["action"].get("parameters", {}),
+                }
+                for e in audit.entries
+                if e["incident_id"] == incident_id
+            ],
+            "timeline": [
+                {
+                    "timestamp": e["timestamp"],
+                    "description": f"{e['action']['name']} - {e['action']['result']}",
+                }
+                for e in audit.entries
+                if e["incident_id"] == incident_id
+            ],
+            "recommendations": [
+                "Review OSINT data for additional IOCs",
+                "Check if this IP is part of a larger campaign",
+                "Update threat intelligence feeds with IOCs",
+                "Consider adjusting detection thresholds if false positive",
+            ],
+        }
+
+        # Generate incident report
+        incident_report_path = generator.generate_incident_report(incident_data)
+        logger.info(f"Incident report generated: {incident_report_path}")
+
+        # Generate Slack notification
+        slack_msg = generator.generate_slack_notification(incident_data)
+        logger.info(f"Slack notification ready (saved to incidents/slack/{incident_id}.txt)")
+
+        # Generate enhanced dossier
+        dossier_data = {
+            "incident_id": incident_id,
+            "attacker_ip": attacker_ip,
+            "whois": osint_data["modules"].get("whois", {}),
+            "rdns": osint_data["modules"].get("reverse_dns", {}),
+            "shodan": osint_data["modules"].get("shodan", {}),
+            "ct": osint_data["modules"].get("cert_transparency", {}),
+            "detection_signals": incident_data["detection_signals"],
+            "detected_tools": [],
+            "timeline": incident_data["timeline"],
+            "risk_score": min(10, int(detection.get("confidence", 0.97) * 10)),
+            "risk_factors": [
+                {
+                    "name": "Detection Confidence",
+                    "score": min(10, int(detection.get("confidence", 0.97) * 10)),
+                    "reasoning": f"High confidence detection ({detection.get('confidence', 0.97):.2f})",
+                }
+            ],
+            "attribution_confidence": "Medium",
+            "behavioral_iocs": [
+                f"Reconnaissance activity from {attacker_ip}",
+                f"Signature: {detection.get('signature', 'Unknown')}",
+            ],
+            "immediate_actions": [
+                "Monitor for continued activity from this IP",
+                "Review honeypot logs for additional TTPs",
+            ],
+            "shortterm_actions": [
+                "Correlate with other incidents from same ASN",
+                "Update detection signatures if new patterns found",
+            ],
+            "longterm_actions": [
+                "Review overall detection coverage",
+                "Consider proactive threat hunting for similar patterns",
+            ],
+            "related_incidents": [],
+            "associated_domains": [],
+            "agent_version": "1.0.0",
+            "database_entries": len(audit.entries),
+            "cache_hit_rate": 0,
+        }
+
+        dossier_path = generator.generate_dossier(dossier_data)
+        logger.info(f"Threat actor dossier generated: {dossier_path}")
+
+        audit.record(
+            incident_id=incident_id,
+            action_id="generate-incident-templates",
+            action_name="Generate incident report templates",
+            tier=None,
+            parameters={
+                "incident_report": incident_report_path,
+                "dossier": dossier_path,
+                "slack_notification": f"incidents/slack/{incident_id}.txt",
+            },
+            result="success",
+            justification={
+                "trigger": "incident-complete",
+                "detection_confidence": 1.0,
+                "evidence_refs": [],
+                "playbook_rule": None,
+                "reasoning": "Templates generated for manual GitHub issue creation or Slack posting",
+            },
+            context={"attacker_ip": attacker_ip},
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to generate incident report templates: {e}")
+
     return report_file

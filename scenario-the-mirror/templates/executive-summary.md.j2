@@ -1,0 +1,52 @@
+# Security Incident Summary: {{ date_range }}
+
+## Overview
+
+**Period**: {{ start_date }} to {{ end_date }}
+**Total Incidents**: {{ total_incidents }}
+**Unique Attackers**: {{ unique_ips }}
+
+## Incident Breakdown
+
+### By Severity
+- 🔴 High: {{ high_severity }} ({{ high_severity_pct }}%)
+- 🟡 Medium: {{ medium_severity }} ({{ medium_severity_pct }}%)
+- 🟢 Low: {{ low_severity }} ({{ low_severity_pct }}%)
+
+### By Attack Type
+{% for type, count in attack_types -%}
+- {{ type }}: {{ count }}
+{% endfor %}
+
+### Top Attacking Countries
+{% for country, count in top_countries[:5] -%}
+- {{ country }}: {{ count }}
+{% endfor %}
+
+### Top Attacking ASNs
+{% for asn, org, count in top_asns[:5] -%}
+- AS{{ asn }} ({{ org }}): {{ count }}
+{% endfor %}
+
+## Response Actions
+
+**Total Actions**: {{ total_actions }}
+
+{% for action, count in action_stats -%}
+- {{ action }}: {{ count }}
+{% endfor %}
+
+## Cache Performance
+
+**OSINT Cache Hit Rate**: {{ cache_hit_rate }}%
+**API Calls Saved**: {{ api_calls_saved }}
+
+## Honeypot Activity
+
+**SSH Sessions**: {{ ssh_sessions }}
+**HTTP Requests**: {{ http_requests }}
+**Malware Downloads**: {{ malware_downloads }}
+
+---
+
+**Generated**: {{ generated_at }}

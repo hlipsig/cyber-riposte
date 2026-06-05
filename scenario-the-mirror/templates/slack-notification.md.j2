@@ -1,0 +1,14 @@
+🚨 **New Security Incident**
+
+**Incident**: {{ incident_id }}
+**Attacker**: `{{ attacker_ip }}`{% if osint.whois %} ({{ osint.whois.org | default('Unknown') }}, {{ osint.whois.country | default('Unknown') }}){% endif %}
+**Detection**: {{ detection_signature }} (confidence: {{ confidence }})
+
+**Actions**:
+{% for action in actions[:3] -%}
+• {{ action.name }}
+{% endfor %}
+
+**Evidence**: {{ evidence_count }} artifacts collected
+
+[View Full Report](./incidents/{{ incident_id }}.md)
