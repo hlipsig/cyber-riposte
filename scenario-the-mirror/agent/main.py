@@ -143,11 +143,32 @@ def readyz():
 
 
 @app.route("/metrics", methods=["GET"])
-def metrics():
-    """Metrics endpoint (Phase 7 will add Prometheus metrics)."""
-    return jsonify({
-        "incidents_processed": health_status["incidents_processed"],
-    }), 200
+def metrics_endpoint():
+    """
+    Prometheus metrics endpoint (Phase 7).
+    Returns metrics in Prometheus text format.
+    """
+    try:
+        from agent.metrics import get_metrics
+        metrics_obj = get_metrics()
+
+        if not metrics_obj.enabled:
+            # Fallback to JSON if Prometheus not available
+            return jsonify({
+                "incidents_processed": health_status["incidents_processed"],
+            }), 200
+
+        # Return Prometheus metrics
+        from flask import Response
+        metrics_data = metrics_obj.generate_metrics()
+        return Response(metrics_data, mimetype=metrics_obj.get_content_type())
+
+    except ImportError:
+        # Prometheus client not available
+        return jsonify({
+            "incidents_processed": health_status["incidents_processed"],
+            "note": "Prometheus metrics not available",
+        }), 200
 
 
 def run_health_server():

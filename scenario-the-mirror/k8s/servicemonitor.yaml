@@ -1,0 +1,41 @@
+# ServiceMonitor for Prometheus scraping (Phase 7)
+# Automatically discovered by Prometheus Operator
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mirror-agent-metrics
+  namespace: cyber-riposte
+  labels:
+    app: mirror-agent
+    metrics: "true"
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: health
+    protocol: TCP
+  selector:
+    app: mirror-agent
+    mode: kafka
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mirror-agent
+  namespace: cyber-riposte
+  labels:
+    app: mirror-agent
+spec:
+  selector:
+    matchLabels:
+      app: mirror-agent
+      metrics: "true"
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
