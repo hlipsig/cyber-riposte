@@ -247,6 +247,24 @@ def run_stdin_mode():
     audit = AuditLog(Config.AUDIT_LOG_PATH)
     mirrored = set()
 
+    # Phase 9: Setup hot-reload for action pool
+    try:
+        from agent.config_watcher import get_config_watcher
+        watcher = get_config_watcher()
+
+        def reload_action_pool():
+            """Reload action pool from disk."""
+            nonlocal pool
+            try:
+                pool = ActionPool()
+                logger.info("Action pool reloaded successfully")
+            except Exception as e:
+                logger.error(f"Failed to reload action pool: {e}")
+
+        watcher.watch(Config.ACTION_POOL_PATH, reload_action_pool)
+    except ImportError:
+        logger.debug("Config watcher not available")
+
     # Mark as ready
     health_status["ready"] = True
     logger.info("Agent ready to process events")
@@ -288,6 +306,29 @@ def run_kafka_mode():
     audit = AuditLog(Config.AUDIT_LOG_PATH)
     mirrored = set()
 
+    # Phase 9: Setup hot-reload for action pool
+    try:
+        from agent.config_watcher import get_config_watcher
+        watcher = get_config_watcher()
+
+        def reload_action_pool():
+            """Reload action pool from disk."""
+            nonlocal pool
+            try:
+                new_pool = ActionPool()
+                # Validate new pool before replacing
+                if new_pool.actions:
+                    pool = new_pool
+                    logger.info(f"Action pool reloaded: {len(pool.actions)} actions")
+                else:
+                    logger.error("New action pool is empty, keeping current pool")
+            except Exception as e:
+                logger.error(f"Failed to reload action pool: {e}")
+
+        watcher.watch(Config.ACTION_POOL_PATH, reload_action_pool)
+    except ImportError:
+        logger.debug("Config watcher not available")
+
     # Create Kafka consumer
     consumer = MirrorKafkaConsumer()
 
@@ -326,6 +367,20 @@ def main():
     health_thread = threading.Thread(target=run_health_server, daemon=True)
     health_thread.start()
     logger.info(f"Health check server started on port {Config.HEALTH_PORT}")
+
+    # Phase 9: Start configuration watcher (hot-reload)
+    try:
+        from agent.config_watcher import get_config_watcher
+        watcher = get_config_watcher()
+
+        # Note: Can't reload action pool here as it's per-mode
+        # Each mode creates its own ActionPool and sets up watcher
+
+        if watcher.enabled:
+            watcher.start()
+            logger.info("Configuration hot-reload enabled")
+    except ImportError as e:
+        logger.warning(f"Configuration watcher not available: {e}")
 
     # Run event processing loop
     if Config.EVENT_SOURCE == "stdin":
