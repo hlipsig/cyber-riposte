@@ -1,0 +1,35 @@
+# Istio Operator installation (Phase 4)
+# Deploys the Istio operator which manages the control plane
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-operator
+
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: istio-operator-catalog
+  namespace: openshift-marketplace
+spec:
+  sourceType: grpc
+  image: gcr.io/istio-release/operator:1.20.0
+  displayName: Istio Operator
+  publisher: Istio
+  updateStrategy:
+    registryPoll:
+      interval: 30m
+
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: istio-operator
+  namespace: istio-operator
+spec:
+  channel: stable
+  name: istio-operator
+  source: istio-operator-catalog
+  sourceNamespace: openshift-marketplace
+  installPlanApproval: Automatic

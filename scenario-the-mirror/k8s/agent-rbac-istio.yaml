@@ -1,0 +1,41 @@
+# RBAC for Mirror agent to create/delete Istio VirtualServices (Phase 4)
+# Grants minimum permissions needed for dynamic traffic redirection
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mirror-agent
+  namespace: cyber-riposte
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mirror-agent-istio
+  namespace: cyber-riposte
+rules:
+# VirtualService permissions
+- apiGroups: ["networking.istio.io"]
+  resources: ["virtualservices"]
+  verbs: ["get", "list", "watch", "create", "delete", "patch"]
+
+# DestinationRule permissions (optional - for advanced routing)
+- apiGroups: ["networking.istio.io"]
+  resources: ["destinationrules"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mirror-agent-istio
+  namespace: cyber-riposte
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mirror-agent-istio
+subjects:
+- kind: ServiceAccount
+  name: mirror-agent
+  namespace: cyber-riposte

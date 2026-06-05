@@ -1,49 +1,63 @@
+# Istio Gateway and default VirtualService (Phase 4)
+# Gateway: Entry point for red team domain
+# Default VirtualService: Routes all traffic to real app (unless overridden by attacker-specific rules)
+
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
-  name: mirror-gateway
+  name: redteam-gateway
   namespace: cyber-riposte
 spec:
   selector:
-    istio: ingressgateway
+    istio: ingressgateway  # Use default Istio ingress gateway
   servers:
+  # HTTP (port 80)
   - port:
       number: 80
       name: http
       protocol: HTTP
     hosts:
-    - "your-domain.com"
-    - "*.your-domain.com"
+    - "redteam.example.com"  # Replace with your red team domain
+    - "*"  # Allow all hosts for testing (remove in production)
+
+  # HTTPS (port 443)
   - port:
       number: 443
       name: https
       protocol: HTTPS
     tls:
       mode: SIMPLE
-      credentialName: mirror-tls-cert
+      credentialName: redteam-tls-cert  # Create this secret with your TLS cert
     hosts:
-    - "your-domain.com"
-    - "*.your-domain.com"
+    - "redteam.example.com"
+    - "*"
+
 ---
-# Default VirtualService for legitimate traffic (before attacker detection)
+# Default VirtualService - routes all traffic to real app
+# Attacker-specific VirtualServices will have higher priority (lower number)
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: mirror-default-routes
+  name: default-route
   namespace: cyber-riposte
+  labels:
+    app: mirror-agent
+    route-type: default
 spec:
   hosts:
-  - "your-domain.com"
-  - "*.your-domain.com"
+  - "*"
   gateways:
-  - mirror-gateway
+  - redteam-gateway
   http:
   - match:
     - uri:
         prefix: "/"
     route:
     - destination:
-        host: legitimate-app-service.cyber-riposte.svc.cluster.local
+        host: webapp-service  # Replace with your real application service
         port:
-          number: 80
+          number: 8080
+      weight: 100
+  # Lower priority (evaluated last)
+  priority: 100

@@ -375,6 +375,103 @@ class DatabaseManager:
             logger.error(f"Failed to mark postmortem generated: {e}")
             return False
 
+    def create_virtualservice(
+        self,
+        incident_id: str,
+        vs_name: str,
+        vs_namespace: str,
+        attacker_ip: str,
+        honeypot_destination: str,
+        expires_at: datetime,
+    ) -> Optional[str]:
+        """
+        Record VirtualService creation (Phase 4).
+        Returns virtualservice UUID if successful, None otherwise.
+        """
+        if not self.pool:
+            return None
+
+        try:
+            with self.get_conn() as conn:
+                with conn.cursor() as cur:
+                    query = """
+                    INSERT INTO virtualservices (
+                        incident_id, vs_name, vs_namespace,
+                        attacker_ip, honeypot_destination, expires_at, status
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s
+                    )
+                    RETURNING id;
+                    """
+
+                    cur.execute(query, (
+                        incident_id,
+                        vs_name,
+                        vs_namespace,
+                        attacker_ip,
+                        honeypot_destination,
+                        expires_at,
+                        'active',
+                    ))
+
+                    vs_id = cur.fetchone()[0]
+                    conn.commit()
+
+                    logger.debug(f"VirtualService recorded: {vs_id} ({vs_name})")
+                    return str(vs_id)
+
+        except Exception as e:
+            logger.error(f"Failed to record VirtualService: {e}")
+            return None
+
+    def get_expired_virtualservices(self) -> List[Dict[str, Any]]:
+        """
+        Get VirtualServices that have expired but not yet deleted.
+        Returns list of VS dicts with id, vs_name, vs_namespace, attacker_ip.
+        """
+        if not self.pool:
+            return []
+
+        try:
+            with self.get_conn() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    query = """
+                    SELECT id, incident_id, vs_name, vs_namespace, attacker_ip
+                    FROM virtualservices
+                    WHERE status = 'active'
+                      AND expires_at <= NOW()
+                    ORDER BY expires_at ASC
+                    """
+                    cur.execute(query)
+
+                    rows = cur.fetchall()
+                    return [dict(row) for row in rows]
+
+        except Exception as e:
+            logger.error(f"Failed to get expired VirtualServices: {e}")
+            return []
+
+    def mark_virtualservice_deleted(self, vs_id: str) -> bool:
+        """Mark VirtualService as deleted."""
+        if not self.pool:
+            return False
+
+        try:
+            with self.get_conn() as conn:
+                with conn.cursor() as cur:
+                    query = """
+                    UPDATE virtualservices
+                    SET status = 'deleted', deleted_at = NOW()
+                    WHERE id = %s
+                    """
+                    cur.execute(query, (vs_id,))
+                    conn.commit()
+                    return True
+
+        except Exception as e:
+            logger.error(f"Failed to mark VirtualService deleted: {e}")
+            return False
+
     def close(self):
         """Close connection pool."""
         if self.pool:

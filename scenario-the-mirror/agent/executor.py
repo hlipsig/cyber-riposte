@@ -2,18 +2,27 @@
 Action executor for The Mirror agent.
 Executes pre-approved defensive actions from the action pool.
 
-Phase 1: Uses subprocess for nftables (will fail in K8s, placeholder)
-Phase 4: Will be refactored to use Kubernetes API for Istio VirtualService
+Phase 1-3: Uses subprocess for nftables (will fail in K8s, placeholder)
+Phase 4: Uses Kubernetes API for Istio VirtualService (dynamic traffic redirection)
 """
 import importlib.util
 import json
 import logging
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from typing import Tuple, Optional
 
 from agent.config import Config
+
+# Kubernetes API client (Phase 4)
+try:
+    from kubernetes import client, config as k8s_config
+    K8S_AVAILABLE = True
+except ImportError:
+    K8S_AVAILABLE = False
+    logging.warning("Kubernetes client not available. Install with: pip install kubernetes")
 
 
 # Import OSINT modules from osint-modules directory (note: hyphenated name)
@@ -43,12 +52,128 @@ ct_lookup = ct_module.ct_lookup
 logger = logging.getLogger(__name__)
 
 
+def _create_virtualservice(attacker_ip: str, incident_id: str, duration_hours: int = 24) -> Tuple[str, bool]:
+    """
+    Phase 4: Create Istio VirtualService to redirect attacker traffic to honeypot.
+
+    Returns (vs_name, success).
+    """
+    if not K8S_AVAILABLE:
+        logger.error("Kubernetes client not available. Cannot create VirtualService.")
+        return "", False
+
+    try:
+        # Load in-cluster Kubernetes config
+        k8s_config.load_incluster_config()
+    except k8s_config.ConfigException:
+        try:
+            # Fallback to kubeconfig (for local development)
+            k8s_config.load_kube_config()
+        except k8s_config.ConfigException:
+            logger.error("Could not load Kubernetes config")
+            return "", False
+
+    # VirtualService name (sanitize IP for DNS)
+    vs_name = f"redirect-attacker-{attacker_ip.replace('.', '-')}"
+    namespace = "cyber-riposte"
+
+    # VirtualService spec
+    vs_spec = {
+        "apiVersion": "networking.istio.io/v1beta1",
+        "kind": "VirtualService",
+        "metadata": {
+            "name": vs_name,
+            "namespace": namespace,
+            "labels": {
+                "app": "mirror-agent",
+                "route-type": "attacker",
+                "incident": incident_id,
+                "attacker_ip": attacker_ip.replace(".", "-"),  # Labels can't have dots
+            },
+            "annotations": {
+                "mirror.cyber-riposte.io/created-at": datetime.now(timezone.utc).isoformat(),
+                "mirror.cyber-riposte.io/expires-at": (
+                    datetime.now(timezone.utc) + timedelta(hours=duration_hours)
+                ).isoformat(),
+                "mirror.cyber-riposte.io/incident-id": incident_id,
+            },
+        },
+        "spec": {
+            "hosts": ["*"],
+            "gateways": ["redteam-gateway"],
+            "http": [
+                {
+                    "match": [
+                        {
+                            "headers": {
+                                "x-forwarded-for": {
+                                    "exact": attacker_ip
+                                }
+                            }
+                        }
+                    ],
+                    "route": [
+                        {
+                            "destination": {
+                                "host": Config.HONEYPOT_IP,  # honeypot-service
+                                "port": {"number": 8080}
+                            }
+                        }
+                    ],
+                }
+            ],
+            "priority": 10,  # Higher precedence than default (lower number = higher priority)
+        },
+    }
+
+    try:
+        # Create VirtualService via Kubernetes API
+        api = client.CustomObjectsApi()
+        api.create_namespaced_custom_object(
+            group="networking.istio.io",
+            version="v1beta1",
+            namespace=namespace,
+            plural="virtualservices",
+            body=vs_spec,
+        )
+
+        logger.info(f"Created VirtualService: {vs_name} (redirects {attacker_ip} → honeypot)")
+
+        # Phase 3: Store VirtualService in database
+        try:
+            from agent.db import get_db_manager
+            db = get_db_manager()
+            db.create_virtualservice(
+                incident_id=incident_id,
+                vs_name=vs_name,
+                vs_namespace=namespace,
+                attacker_ip=attacker_ip,
+                honeypot_destination=Config.HONEYPOT_IP,
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=duration_hours),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record VirtualService in database: {e}")
+
+        return vs_name, True
+
+    except client.rest.ApiException as e:
+        if e.status == 409:  # Already exists
+            logger.warning(f"VirtualService {vs_name} already exists")
+            return vs_name, True
+        else:
+            logger.error(f"Failed to create VirtualService: {e}")
+            return "", False
+    except Exception as e:
+        logger.error(f"Unexpected error creating VirtualService: {e}")
+        return "", False
+
+
 def execute_redirect(attacker_ip, pool, audit, incident_id, detection):
     """
     Tier 1: redirect attacker to honeypot.
 
-    Phase 1: Uses nftables (will fail in K8s, logged as placeholder)
-    Phase 4: Will create Istio VirtualService instead
+    Phase 4: Creates Istio VirtualService for dynamic traffic redirection.
+    Fallback to nftables if Kubernetes API unavailable (Phase 1 behavior).
     """
     action_id = "redirect-to-honeypot"
     can_exec, reason = pool.can_execute(action_id)
@@ -56,7 +181,47 @@ def execute_redirect(attacker_ip, pool, audit, incident_id, detection):
         logger.warning(f"SKIPPED {action_id}: {reason}")
         return None
 
-    # Phase 1: nftables rule (will fail in K8s, but we'll log it)
+    # Phase 4: Try to create VirtualService
+    vs_name, vs_success = _create_virtualservice(attacker_ip, incident_id, duration_hours=24)
+
+    if vs_success:
+        # VirtualService created successfully
+        expiry = pool.get_expiry(action_id)
+        audit.record(
+            incident_id=incident_id,
+            action_id=action_id,
+            action_name="Redirect traffic to honeypot via Istio VirtualService",
+            tier=1,
+            parameters={
+                "source_ip": attacker_ip,
+                "honeypot_ip": Config.HONEYPOT_IP,
+                "virtualservice_name": vs_name,
+                "method": "istio"
+            },
+            result="success",
+            justification={
+                "trigger": "recon-detected",
+                "detection_confidence": detection.get("confidence", 0.97),
+                "evidence_refs": [detection.get("timestamp", "")],
+                "playbook_rule": action_id,
+                "reasoning": "Recon pattern confirmed, IP not in allowlist, VirtualService created successfully",
+            },
+            context={
+                "attacker_ip": attacker_ip,
+                "honeypot_active": True,
+                "virtualservice_name": vs_name,
+                "namespace": "cyber-riposte",
+                "method": "istio",
+            },
+            rollback_handle=vs_name,  # VirtualService name for cleanup
+            expires_at=expiry,
+        )
+        pool.mark_executed()
+        return True
+
+    # Fallback: Phase 1 behavior (nftables - will fail but logged)
+    logger.warning("VirtualService creation failed. Falling back to nftables (Phase 1 mode)")
+
     rule_content = (
         f"table ip nat {{\n"
         f"    chain prerouting {{\n"
@@ -67,7 +232,6 @@ def execute_redirect(attacker_ip, pool, audit, incident_id, detection):
         f"}}\n"
     )
 
-    # Try to run nftables (will fail in K8s, but that's OK for Phase 1)
     result_code = 1  # Assume failure
     try:
         result = subprocess.run(
@@ -84,24 +248,25 @@ def execute_redirect(attacker_ip, pool, audit, incident_id, detection):
     audit.record(
         incident_id=incident_id,
         action_id=action_id,
-        action_name="Redirect traffic to honeypot",
+        action_name="Redirect traffic to honeypot (fallback mode)",
         tier=1,
-        parameters={"source_ip": attacker_ip, "honeypot_ip": Config.HONEYPOT_IP},
+        parameters={"source_ip": attacker_ip, "honeypot_ip": Config.HONEYPOT_IP, "method": "nftables"},
         result="success" if result_code == 0 else "simulated",
         justification={
             "trigger": "recon-detected",
             "detection_confidence": detection.get("confidence", 0.97),
             "evidence_refs": [detection.get("timestamp", "")],
             "playbook_rule": action_id,
-            "reasoning": "Recon pattern confirmed, IP not in allowlist, honeypot health check passed",
+            "reasoning": "Recon pattern confirmed, VirtualService unavailable, fell back to nftables",
         },
         context={
             "attacker_ip": attacker_ip,
             "honeypot_active": True,
-            "phase1_note": "nftables not available in K8s - Phase 4 will use Istio VirtualService"
+            "method": "nftables-fallback",
+            "note": "VirtualService creation failed - nftables not available in K8s"
         },
         rollback_handle="nft-handle-placeholder",
-        expires_at=expiry.isoformat(),
+        expires_at=expiry,
     )
     pool.mark_executed()
     return True
