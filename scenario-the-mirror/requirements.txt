@@ -24,8 +24,9 @@ sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.9
 alembic>=1.13.0
 
-# Phase 4: Kubernetes API
+# Phase 4: Kubernetes API & GitHub Integration
 kubernetes>=28.0.0
+requests>=2.31.0
 
 # Phase 6: OSINT resilience
 redis>=5.0.0

@@ -504,7 +504,11 @@ def compile_dossier(attacker_ip, detection, osint_data):
 
 
 def generate_postmortem(incident_id, attacker_ip, detection, osint_data, audit):
-    """Generate the post-mortem report for morning review."""
+    """
+    Generate the post-mortem report for morning review.
+
+    Phase 4: Also creates GitHub issue with incident report.
+    """
     postmortem_dir = Path(Config.POSTMORTEM_DIR)
     postmortem_dir.mkdir(parents=True, exist_ok=True)
 
@@ -543,6 +547,67 @@ def generate_postmortem(incident_id, attacker_ip, detection, osint_data, audit):
     except Exception as e:
         logger.error(f"Failed to write post-mortem report: {e}")
         return None
+
+    # Phase 4: Create GitHub issue with incident report
+    github_issue_url = None
+    try:
+        from agent.github_reporter import create_incident_issue
+
+        # Build timeline for GitHub
+        timeline = [
+            {
+                'timestamp': e['timestamp'],
+                'description': f"{e['action']['name']} - {e['action']['result']}"
+            }
+            for e in audit.entries
+            if e["incident_id"] == incident_id
+        ]
+
+        # Build actions taken list
+        actions_taken = [
+            {
+                'name': e['action']['name'],
+                'result': e['action']['result'],
+                'tier': e['action'].get('tier')
+            }
+            for e in audit.entries
+            if e["incident_id"] == incident_id
+        ]
+
+        github_issue_url = create_incident_issue(
+            incident_id=incident_id,
+            incident_data={
+                'attacker_ip': attacker_ip,
+                'detection_signature': detection.get('signature', 'Unknown'),
+                'detection_confidence': detection.get('confidence', 0.0),
+                'osint_data': osint_data if osint_data else {},
+                'actions_taken': actions_taken,
+                'timeline': timeline,
+            }
+        )
+
+        if github_issue_url:
+            logger.info(f"✅ GitHub issue created: {github_issue_url}")
+
+            # Update database with GitHub URL
+            try:
+                from agent.db import get_db_manager
+                db = get_db_manager()
+                with db.get_conn() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            UPDATE incidents
+                            SET github_issue_url = %s,
+                                last_updated = NOW()
+                            WHERE incident_id = %s
+                        """, (github_issue_url, incident_id))
+                        conn.commit()
+                        logger.info(f"Updated incident {incident_id} with GitHub URL")
+            except Exception as e:
+                logger.warning(f"Failed to update incident with GitHub URL: {e}")
+
+    except Exception as e:
+        logger.warning(f"Failed to create GitHub issue: {e}")
 
     audit.record(
         incident_id=incident_id,
