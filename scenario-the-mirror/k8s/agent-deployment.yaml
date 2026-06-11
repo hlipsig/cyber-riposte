@@ -20,11 +20,14 @@ spec:
       serviceAccountName: mirror-agent
       containers:
       - name: mirror-agent
-        image: quay.io/your-org/mirror-agent:latest  # Replace with actual registry
+        image: image-registry.openshift-image-registry.svc:5000/cyber-riposte/mirror-agent:latest
         imagePullPolicy: Always
         ports:
         - name: health
           containerPort: 8080
+          protocol: TCP
+        - name: dossier
+          containerPort: 8081
           protocol: TCP
         env:
         # Event source configuration
@@ -67,28 +70,37 @@ spec:
         # - name: KAFKA_CONSUMER_GROUP
         #   value: "mirror-agent"
 
-        # Phase 3: Database configuration (commented out for Phase 1)
-        # - name: DATABASE_URL
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: mirror-agent-secrets
-        #       key: DATABASE_URL
+        # Database configuration
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: mirror-agent-secrets
+              key: DATABASE_URL
 
-        # Phase 8: GitHub/Slack integration (commented out for Phase 1)
-        # - name: GITHUB_TOKEN
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: mirror-agent-secrets
-        #       key: GITHUB_TOKEN
-        #       optional: true
-        # - name: GITHUB_REPO
-        #   value: "your-org/security-incidents"
-        # - name: SLACK_WEBHOOK_URL
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: mirror-agent-secrets
-        #       key: SLACK_WEBHOOK_URL
-        #       optional: true
+        # GitHub/Slack integration
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: mirror-agent-secrets
+              key: GITHUB_TOKEN
+              optional: true
+        - name: GITHUB_REPO
+          value: "hlipsig/capture-the-flag"
+        - name: SLACK_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: mirror-agent-secrets
+              key: SLACK_WEBHOOK_URL
+              optional: true
+
+        # CTF Dossier Web Server
+        - name: DOSSIER_PORT
+          value: "8081"
+        - name: DOSSIER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mirror-agent-secrets
+              key: DOSSIER_PASSWORD
 
         # Liveness probe - is the process running?
         livenessProbe:
@@ -132,7 +144,6 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false
           runAsNonRoot: true
-          runAsUser: 1001
           capabilities:
             drop:
             - ALL

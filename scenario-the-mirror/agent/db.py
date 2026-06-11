@@ -69,6 +69,11 @@ class DatabaseManager:
         finally:
             self.pool.putconn(conn)
 
+    # Alias for compatibility with web_dossier.py
+    def get_connection(self):
+        """Alias for get_conn() for compatibility."""
+        return self.get_conn()
+
     def log_audit_entry(
         self,
         incident_id: str,

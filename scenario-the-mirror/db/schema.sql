@@ -91,6 +91,9 @@ CREATE TABLE IF NOT EXISTS incidents (
     -- GitHub integration
     github_issue_url TEXT,
 
+    -- AI-generated narrative (Hugging Face)
+    ai_narrative TEXT,
+
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
