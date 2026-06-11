@@ -32,12 +32,19 @@ def detect_recon(eve_event):
     """
     Detect reconnaissance from IDS alerts and/or user-agent analysis.
 
-    Detection sources:
-    1. Suricata alert categories (port scans, web attacks)
-    2. Suspicious user-agent strings (Nuclei, sqlmap, gobuster, etc.)
+    Phase 1: Enhanced with Suricata IDS integration.
 
-    Either signal alone is sufficient to trigger, but both together
-    increase detection confidence.
+    Detection sources:
+    1. Suricata IDS alerts (port scans, web attacks, CVE exploits)
+    2. Suspicious user-agent strings (Nuclei, sqlmap, gobuster, Nmap, etc.)
+    3. Behavioral patterns (rapid requests, 404 patterns, SSH brute force)
+
+    Either signal alone is sufficient to trigger, but multiple signals
+    increase detection confidence. Confidence scores:
+    - IDS high-severity alert: 0.95
+    - IDS medium-severity alert: 0.85
+    - Custom Mirror rules (SID 9000000+): 0.90+
+    - Suspicious user-agent: 0.70-0.90 (based on threat level)
 
     Args:
         eve_event: Suricata EVE event (dict)
@@ -52,18 +59,44 @@ def detect_recon(eve_event):
         "confidence": 0.0,
     }
 
-    # Signal 1: IDS alerts
+    # Signal 1: IDS alerts (Phase 1)
     if eve_event.get("event_type") == "alert":
         alert = eve_event.get("alert", {})
         category = alert.get("category", "").lower()
-        recon_categories = ["attempted-recon", "network-scan", "web-application-attack"]
+        signature_id = alert.get("signature_id", 0)
+        severity = alert.get("severity", 3)
+
+        # Reconnaissance categories
+        recon_categories = [
+            "attempted-recon",
+            "network-scan",
+            "web-application-attack",
+            "attempted-user",  # Brute force
+            "attempted-admin",  # Exploit attempts
+            "attempted-dos",    # DoS/DDoS
+            "trojan-activity",  # Malware/crypto mining
+        ]
+
         if any(cat in category for cat in recon_categories):
             detection["signals"].append({
                 "type": "ids_alert",
                 "signature": alert.get("signature"),
-                "severity": alert.get("severity"),
+                "signature_id": signature_id,
+                "category": category,
+                "severity": severity,
             })
-            detection["confidence"] = max(detection["confidence"], 0.90)
+
+            # Confidence based on severity and rule origin
+            if signature_id >= 9000000:  # Custom Mirror rules
+                conf = 0.95
+            elif severity == 1:  # High severity
+                conf = 0.95
+            elif severity == 2:  # Medium severity
+                conf = 0.85
+            else:  # Low severity
+                conf = 0.75
+
+            detection["confidence"] = max(detection["confidence"], conf)
 
     # Signal 2: User-agent analysis
     ua_string = eve_event.get("http", {}).get("http_user_agent", "")

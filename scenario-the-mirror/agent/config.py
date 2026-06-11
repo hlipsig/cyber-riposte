@@ -30,8 +30,12 @@ class Config:
     # Health check
     HEALTH_PORT = int(os.getenv("HEALTH_PORT", "8080"))
 
-    # Event source (Phase 1: stdin, Phase 2: will be Kafka)
-    EVENT_SOURCE = os.getenv("EVENT_SOURCE", "stdin")  # stdin or kafka
+    # Event source (Phase 1: stdin/suricata, Phase 2: kafka)
+    EVENT_SOURCE = os.getenv("EVENT_SOURCE", "stdin")  # stdin, suricata, or kafka
+
+    # Suricata configuration (Phase 1)
+    SURICATA_EVE_LOG = os.getenv("SURICATA_EVE_LOG", "/var/log/suricata/eve.json")
+    SURICATA_MODE = os.getenv("SURICATA_MODE", "file")  # file or redis
 
     # Kafka configuration (Phase 2)
     KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")

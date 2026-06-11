@@ -1,0 +1,277 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: suricata-config
+  namespace: the-mirror
+data:
+  suricata.yaml: |
+    %YAML 1.1
+    ---
+    vars:
+      address-groups:
+        HOME_NET: "[192.168.0.0/16,10.0.0.0/8,172.16.0.0/12]"
+        EXTERNAL_NET: "!$HOME_NET"
+
+    outputs:
+      - eve-log:
+          enabled: yes
+          filetype: regular
+          filename: /var/log/suricata/eve.json
+          types:
+            - alert:
+                payload: yes
+                payload-buffer-size: 4kb
+                payload-printable: yes
+                packet: yes
+                metadata: yes
+            - http:
+                extended: yes
+            - dns:
+                query: yes
+                answer: yes
+            - tls:
+                extended: yes
+            - files:
+                force-magic: no
+            - flow
+
+    af-packet:
+      - interface: any
+        threads: auto
+        cluster-id: 99
+        cluster-type: cluster_flow
+        defrag: yes
+        use-mmap: yes
+        tpacket-v3: yes
+
+    default-rule-path: /etc/suricata/rules
+    rule-files:
+      - mirror-recon.rules
+      - emerging-scan.rules
+
+    stream:
+      memcap: 64mb
+      checksum-validation: yes
+      inline: no
+
+    app-layer:
+      protocols:
+        http:
+          enabled: yes
+          memcap: 64mb
+        tls:
+          enabled: yes
+        dns:
+          tcp:
+            enabled: yes
+          udp:
+            enabled: yes
+
+    logging:
+      default-log-level: notice
+      outputs:
+        - console:
+            enabled: yes
+        - file:
+            enabled: yes
+            level: info
+            filename: /var/log/suricata/suricata.log
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: suricata-rules
+  namespace: the-mirror
+data:
+  mirror-recon.rules: |
+    # The Mirror - Custom Reconnaissance Detection Rules
+
+    # Nmap Scans
+    alert tcp any any -> $HOME_NET any (msg:"ET SCAN Nmap Scripting Engine User-Agent Detected"; flow:to_server,established; content:"User-Agent|3a 20|"; http_header; content:"Nmap Scripting Engine"; http_header; nocase; classtype:web-application-attack; sid:2100498; rev:7; metadata:created_at 2010_07_30, updated_at 2019_07_26;)
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR Nmap Version Detection"; flow:to_server,established; content:"GET"; http_method; content:"/nmaplowercheck"; http_uri; nocase; classtype:attempted-recon; sid:9000001; rev:1;)
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR Nmap NSE HTTP User-Agent"; flow:to_server,established; content:"User-Agent|3a 20|Mozilla"; http_header; content:"compatible|3b 20|Nmap"; http_header; classtype:attempted-recon; sid:9000002; rev:1;)
+
+    # Port Scans
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR SYN Flood or Port Scan"; flags:S,12; detection_filter:track by_src, count 20, seconds 60; classtype:attempted-recon; sid:9000003; rev:1;)
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR Possible SYN Scan"; flags:S,12; threshold:type threshold, track by_src, count 10, seconds 10; classtype:attempted-recon; sid:9000004; rev:1;)
+
+    # Web Scanners
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR Gobuster/Dirb Directory Brute Force"; flow:to_server,established; content:"User-Agent|3a 20|gobuster"; http_header; nocase; classtype:web-application-attack; sid:9000005; rev:1;)
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR Nikto Web Scanner"; flow:to_server,established; content:"User-Agent|3a 20|"; http_header; content:"Nikto"; http_header; nocase; classtype:web-application-attack; sid:9000006; rev:1;)
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR SQLMap SQL Injection Tool"; flow:to_server,established; content:"User-Agent|3a 20|sqlmap"; http_header; nocase; classtype:web-application-attack; sid:9000007; rev:1;)
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR WPScan WordPress Scanner"; flow:to_server,established; content:"User-Agent|3a 20|WPScan"; http_header; nocase; classtype:web-application-attack; sid:9000008; rev:1;)
+
+    # Suspicious HTTP Requests
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR Multiple 404s - Directory Enumeration"; flow:to_server,established; http_stat_code:404; threshold:type threshold, track by_src, count 10, seconds 60; classtype:web-application-attack; sid:9000009; rev:1;)
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR Rapid Sequential HTTP Requests"; flow:to_server,established; content:"GET"; http_method; threshold:type threshold, track by_src, count 30, seconds 10; classtype:attempted-dos; sid:9000010; rev:1;)
+
+    # Credential Attacks
+    alert tcp any any -> $HOME_NET 22 (msg:"MIRROR SSH Brute Force Attempt"; flags:S,12; threshold:type threshold, track by_src, count 5, seconds 60; classtype:attempted-user; sid:9000011; rev:1;)
+    alert tcp any any -> $HOME_NET 22 (msg:"MIRROR Multiple SSH Failed Logins"; flow:to_server,established; content:"Failed password"; nocase; threshold:type threshold, track by_src, count 3, seconds 300; classtype:attempted-user; sid:9000012; rev:1;)
+
+    # CVE Exploits
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR Log4j RCE Attempt (CVE-2021-44228)"; flow:to_server,established; content:"${jndi:"; nocase; fast_pattern; classtype:attempted-admin; sid:9000013; rev:1;)
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR Shellshock Attempt (CVE-2014-6271)"; flow:to_server,established; content:"() {"; http_header; classtype:attempted-admin; sid:9000014; rev:1;)
+
+    # Crypto Mining
+    alert tcp any any -> $HOME_NET any (msg:"MIRROR Crypto Mining Pool Connection"; flow:to_server,established; content:".pool."; nocase; content:"stratum+tcp://"; nocase; classtype:trojan-activity; sid:9000015; rev:1;)
+
+  emerging-scan.rules: |
+    # Emerging Threats - Scan Detection (subset)
+    # Full ruleset: https://rules.emergingthreats.net/
+
+    alert tcp any any -> $HOME_NET any (msg:"ET SCAN Potential VNC Scan"; flags:S,12; threshold:type both, track by_src, count 5, seconds 60; reference:url,doc.emergingthreats.net/2001569; classtype:attempted-recon; sid:2001569; rev:13;)
+    alert tcp any any -> $HOME_NET 23 (msg:"ET SCAN Potential Telnet Scan"; flags:S,12; threshold:type both, track by_src, count 5, seconds 60; classtype:attempted-recon; sid:2001570; rev:10;)
+    alert tcp any any -> $HOME_NET any (msg:"ET SCAN Suspicious inbound to PostgreSQL port 5432"; flags:S,12; threshold:type both, track by_src, count 5, seconds 60; classtype:attempted-recon; sid:2010937; rev:3;)
+    alert tcp any any -> $HOME_NET any (msg:"ET SCAN Suspicious inbound to Redis port 6379"; flags:S,12; threshold:type both, track by_src, count 5, seconds 60; classtype:attempted-recon; sid:2020445; rev:3;)
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: suricata-logs
+  namespace: the-mirror
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ocs-storagecluster-cephfs
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: suricata
+  namespace: the-mirror
+  labels:
+    app: suricata
+    component: ids
+spec:
+  selector:
+    matchLabels:
+      app: suricata
+  template:
+    metadata:
+      labels:
+        app: suricata
+        component: ids
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: suricata
+        image: jasonish/suricata:latest
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+              - NET_ADMIN
+              - NET_RAW
+              - SYS_NICE
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+        volumeMounts:
+        - name: suricata-config
+          mountPath: /etc/suricata/suricata.yaml
+          subPath: suricata.yaml
+        - name: suricata-rules
+          mountPath: /etc/suricata/rules/mirror-recon.rules
+          subPath: mirror-recon.rules
+        - name: suricata-rules
+          mountPath: /etc/suricata/rules/emerging-scan.rules
+          subPath: emerging-scan.rules
+        - name: suricata-logs
+          mountPath: /var/log/suricata
+        - name: host-sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: host-proc
+          mountPath: /host/proc
+          readOnly: true
+        command:
+          - /usr/bin/suricata
+          - -c
+          - /etc/suricata/suricata.yaml
+          - -i
+          - any
+          - --af-packet
+          - -v
+        env:
+        - name: HOME_NET
+          value: "192.168.0.0/16,10.0.0.0/8,172.16.0.0/12"
+        livenessProbe:
+          exec:
+            command:
+              - pgrep
+              - suricata
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - test -f /var/log/suricata/eve.json
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: suricata-config
+        configMap:
+          name: suricata-config
+      - name: suricata-rules
+        configMap:
+          name: suricata-rules
+      - name: suricata-logs
+        persistentVolumeClaim:
+          claimName: suricata-logs
+      - name: host-sys
+        hostPath:
+          path: /sys
+      - name: host-proc
+        hostPath:
+          path: /proc
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      serviceAccountName: suricata-sa
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: suricata-sa
+  namespace: the-mirror
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: suricata-role
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: suricata-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: suricata-role
+subjects:
+- kind: ServiceAccount
+  name: suricata-sa
+  namespace: the-mirror

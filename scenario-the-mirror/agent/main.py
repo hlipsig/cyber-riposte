@@ -391,6 +391,81 @@ def run_kafka_mode():
         logger.info(f"Kafka consumer stats: {stats}")
 
 
+def run_suricata_mode():
+    """
+    Phase 1: Read events from Suricata EVE JSON log.
+    """
+    logger.info("Starting Mirror agent in Suricata mode...")
+    logger.info(f"Suricata EVE log: {Config.SURICATA_EVE_LOG}")
+    logger.info(f"Suricata mode: {Config.SURICATA_MODE}")
+    logger.info(f"Action pool: {Config.ACTION_POOL_PATH}")
+
+    # Validate configuration
+    warnings = Config.validate()
+    for warning in warnings:
+        logger.warning(warning)
+
+    # Import Suricata consumer
+    try:
+        from agent.suricata_consumer import SuricataConsumer
+    except ImportError:
+        logger.error("suricata_consumer not found")
+        sys.exit(1)
+
+    pool = ActionPool()
+    audit = AuditLog(Config.AUDIT_LOG_PATH)
+    mirrored = set()
+
+    # Phase 9: Setup hot-reload for action pool
+    try:
+        from agent.config_watcher import get_config_watcher
+        watcher = get_config_watcher()
+
+        def reload_action_pool():
+            """Reload action pool from disk."""
+            nonlocal pool
+            try:
+                new_pool = ActionPool()
+                if new_pool.actions:
+                    pool = new_pool
+                    logger.info(f"Action pool reloaded: {len(pool.actions)} actions")
+                else:
+                    logger.error("New action pool is empty, keeping current pool")
+            except Exception as e:
+                logger.error(f"Failed to reload action pool: {e}")
+
+        watcher.watch(Config.ACTION_POOL_PATH, reload_action_pool)
+    except ImportError:
+        logger.debug("Config watcher not available")
+
+    # Create Suricata consumer
+    consumer = SuricataConsumer(
+        mode=Config.SURICATA_MODE,
+        eve_log_path=Config.SURICATA_EVE_LOG
+    )
+
+    if not consumer.connect():
+        logger.warning("Suricata not available, waiting for startup...")
+        # Continue anyway - consumer will retry connection
+
+    # Mark as ready
+    health_status["ready"] = True
+    logger.info("Agent ready to consume Suricata alerts")
+
+    # Define event handler
+    def handle_suricata_event(event: dict):
+        """Handle event from Suricata."""
+        if process_event(event, pool, audit, mirrored):
+            health_status["incidents_processed"] += 1
+
+    # Start consuming
+    try:
+        consumer.consume(handle_suricata_event)
+    finally:
+        stats = consumer.get_stats()
+        logger.info(f"Suricata consumer stats: {stats}")
+
+
 def main():
     """Main entry point."""
     setup_logging()
@@ -433,9 +508,11 @@ def main():
     except ImportError as e:
         logger.warning(f"Configuration watcher not available: {e}")
 
-    # Run event processing loop
+    # Run event processing loop (Phase 1: Added Suricata mode)
     if Config.EVENT_SOURCE == "stdin":
         run_stdin_mode()
+    elif Config.EVENT_SOURCE == "suricata":
+        run_suricata_mode()
     elif Config.EVENT_SOURCE == "kafka":
         run_kafka_mode()
     else:
