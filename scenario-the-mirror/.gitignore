@@ -1,0 +1,25 @@
+
+# CTF Solution Files (keep private)
+*TOM*.md
+*CTF*.md
+*PASSWORD*.md
+*SECRETS*.md
+SAMPLE_DOSSIER.html
+test-ctf.sh
+honeypot/admin-notes.txt
+k8s/simple-honeypot.yaml
+k8s/honeypot-routes.yaml
+
+# Deployment documentation (session-specific)
+DEPLOYMENT_COMPLETE.md
+FINAL_STATUS.md
+BUILD_*.md
+WELCOME_BACK.md
+READY_FOR_*.md
+TEST_RESULTS.md
+GITHUB_TOKEN_CONFIGURED.md
+OPENSHIFT_DEPLOYMENT.md
+README_DEPLOYMENT.md
+WEB_DOSSIER_DEPLOYED.md
+ACTIVE_DETECTION_FEATURES.md
+AI_NARRATOR_IMPLEMENTED.md
