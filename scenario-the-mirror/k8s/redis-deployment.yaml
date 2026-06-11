@@ -16,9 +16,9 @@ data:
     port 6379
     protected-mode no
 
-    # Memory
+    # Memory - Evict least recently used keys
     maxmemory 256mb
-    maxmemory-policy allkeys-lru  # Evict least recently used keys
+    maxmemory-policy allkeys-lru
 
     # Persistence (disabled for cache-only use)
     save ""
@@ -95,7 +95,8 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false
           runAsNonRoot: true
-          runAsUser: 999  # redis user
+          seccompProfile:
+            type: RuntimeDefault
           capabilities:
             drop:
             - ALL

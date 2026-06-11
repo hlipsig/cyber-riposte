@@ -105,10 +105,18 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false
           runAsNonRoot: true
-          runAsUser: 1000
+          # Remove runAsUser - let OpenShift assign from allowed range
           capabilities:
             drop:
             - ALL
+          seccompProfile:
+            type: RuntimeDefault
+
+      # Add pod-level security context for OpenShift
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
 
       volumes:
       - name: cowrie-config

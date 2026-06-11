@@ -12,8 +12,7 @@ data:
     [webserver]
     host = 0.0.0.0
     port = 8080
-    uid = 1000
-    gid = 1000
+    # uid and gid removed - OpenShift will assign from allowed range
 
     [logging]
     log_dir = /opt/glastopf/log
@@ -99,10 +98,18 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false
           runAsNonRoot: true
-          runAsUser: 1000
+          # Remove runAsUser - let OpenShift assign from allowed range
           capabilities:
             drop:
             - ALL
+          seccompProfile:
+            type: RuntimeDefault
+
+      # Add pod-level security context for OpenShift
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
 
       volumes:
       - name: glastopf-config

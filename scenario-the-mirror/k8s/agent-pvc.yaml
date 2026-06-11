@@ -12,5 +12,5 @@ spec:
     requests:
       storage: 10Gi
   # Use appropriate storage class for your OpenShift cluster
-  # Example storage classes: gp2, gp3, ocs-storagecluster-ceph-rbd, nfs
-  storageClassName: gp3  # Replace with your storage class
+  # Example storage classes: gp2, gp3, ocs-storagecluster-ceph-rbd, nfs, managed-csi
+  storageClassName: managed-csi  # Azure Disk CSI (default for ARO)

@@ -4,46 +4,27 @@ kind: ServiceAccount
 metadata:
   name: mirror-agent
   namespace: cyber-riposte
-  labels:
-    app: mirror-agent
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: mirror-agent
+  name: mirror-agent-log-reader
   namespace: cyber-riposte
-  labels:
-    app: mirror-agent
 rules:
-# Phase 4: Permissions for creating Istio VirtualServices
-- apiGroups: ["networking.istio.io"]
-  resources: ["virtualservices", "destinationrules"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-# Permissions for creating NetworkPolicies (alternative to Istio)
-- apiGroups: ["networking.k8s.io"]
-  resources: ["networkpolicies"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-# Permissions to read ConfigMaps (for action pool hot-reload in Phase 9)
 - apiGroups: [""]
-  resources: ["configmaps"]
+  resources: ["pods", "pods/log"]
   verbs: ["get", "list", "watch"]
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: mirror-agent
+  name: mirror-agent-log-reader
   namespace: cyber-riposte
-  labels:
-    app: mirror-agent
 subjects:
 - kind: ServiceAccount
   name: mirror-agent
   namespace: cyber-riposte
 roleRef:
   kind: Role
-  name: mirror-agent
+  name: mirror-agent-log-reader
   apiGroup: rbac.authorization.k8s.io
