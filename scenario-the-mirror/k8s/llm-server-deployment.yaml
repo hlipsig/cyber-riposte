@@ -1,0 +1,106 @@
+---
+# Lightweight LLM Server Deployment
+# Serves TinyLlama-1.1B-Chat for fast CPU inference
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-server
+  namespace: the-mirror
+  labels:
+    app: llm-server
+    component: ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llm-server
+  template:
+    metadata:
+      labels:
+        app: llm-server
+        component: ai
+    spec:
+      containers:
+      - name: llm-server
+        image: image-registry.openshift-image-registry.svc:5000/the-mirror/llm-server:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        - name: LLM_MODEL
+          value: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        - name: LLM_DEVICE
+          value: "cpu"
+        - name: LLM_MAX_TOKENS
+          value: "512"
+        - name: PORT
+          value: "8000"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "2Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: 12  # 2 minutes to load model
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-server
+  namespace: the-mirror
+  labels:
+    app: llm-server
+    component: ai
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: llm-server
+
+---
+# Optional: Route for external access (debugging)
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: llm-server
+  namespace: the-mirror
+  labels:
+    app: llm-server
+spec:
+  to:
+    kind: Service
+    name: llm-server
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

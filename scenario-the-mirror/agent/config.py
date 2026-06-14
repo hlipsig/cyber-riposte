@@ -65,17 +65,20 @@ class Config:
     LOG_FORMAT = os.getenv("LOG_FORMAT", "json")  # json or text
 
     # LLM Configuration
-    LLM_BACKEND = os.getenv("LLM_BACKEND", "rules")  # rules, claude, huggingface, hybrid, auto
+    LLM_BACKEND = os.getenv("LLM_BACKEND", "rules")  # rules, claude, huggingface, local-server, auto
 
     # Claude API
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
     CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
 
-    # Hugging Face
+    # Hugging Face (local or API - WARNING: local may crash on large models)
     HF_MODEL = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
     HF_DEVICE = os.getenv("HF_DEVICE", "cpu")  # cpu, cuda, mps
     HF_USE_API = os.getenv("HF_USE_API", "false").lower() == "true"
     HF_API_TOKEN = os.getenv("HF_API_TOKEN", "")
+
+    # Local LLM Server (recommended for on-cluster deployment - crash-free)
+    LLM_SERVER_URL = os.getenv("LLM_SERVER_URL", "http://llm-server:8000")
 
     @classmethod
     def validate(cls):

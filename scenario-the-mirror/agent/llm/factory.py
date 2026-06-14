@@ -16,7 +16,7 @@ def create_llm_provider(backend: Optional[str] = None) -> Optional[LLMProvider]:
     Create an LLM provider based on configuration.
 
     Args:
-        backend: LLM backend to use ("claude", "huggingface", or None for auto-detect)
+        backend: LLM backend to use ("claude", "huggingface", "local-server", or None for auto-detect)
 
     Returns:
         LLMProvider instance or None if no provider available
@@ -31,8 +31,14 @@ def create_llm_provider(backend: Optional[str] = None) -> Optional[LLMProvider]:
         return _create_claude_provider()
     elif backend == "huggingface" or backend == "hf":
         return _create_huggingface_provider()
+    elif backend == "local-server" or backend == "local_server":
+        return _create_local_server_provider()
     elif backend == "auto":
-        # Try Claude first, fall back to Hugging Face, then None
+        # Try local server first (fastest, no crashes), then Claude, then HF
+        provider = _create_local_server_provider()
+        if provider and provider.is_available():
+            return provider
+
         provider = _create_claude_provider()
         if provider and provider.is_available():
             return provider
@@ -104,4 +110,29 @@ def _create_huggingface_provider() -> Optional[LLMProvider]:
         return None
     except Exception as e:
         logger.error(f"Error creating HuggingFace provider: {e}")
+        return None
+
+
+def _create_local_server_provider() -> Optional[LLMProvider]:
+    """Create local LLM server provider (crash-free alternative to local HF)."""
+    try:
+        from agent.llm.local_server_provider import LocalServerProvider
+
+        server_url = os.getenv("LLM_SERVER_URL", "http://llm-server:8000")
+        logger.info(f"Creating local LLM server provider: {server_url}")
+
+        provider = LocalServerProvider(server_url=server_url)
+
+        if provider.is_available():
+            logger.info(f"Local server provider created: {provider.get_model_info()}")
+            return provider
+        else:
+            logger.warning("Local server provider created but not available")
+            return None
+
+    except ImportError as e:
+        logger.warning(f"Could not import local server provider: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error creating local server provider: {e}")
         return None
