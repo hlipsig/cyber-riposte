@@ -1,0 +1,137 @@
+{
+  "dashboard": {
+    "title": "The Mirror - Incident Overview",
+    "tags": ["cyber-riposte", "the-mirror", "security"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Incidents Detected (24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "increase(mirror_incidents_total[24h])",
+            "legendFormat": "Incidents"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 5, "color": "yellow"},
+                {"value": 20, "color": "red"}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Actions Executed (24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "increase(mirror_actions_total[24h])",
+            "legendFormat": "Actions"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "OSINT Lookups (24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "increase(mirror_osint_lookups_total[24h])",
+            "legendFormat": "OSINT Lookups"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Detection Confidence (Avg)",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "avg(mirror_detection_confidence)",
+            "legendFormat": "Confidence"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 0.7, "color": "yellow"},
+                {"value": 0.9, "color": "green"}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Incidents Over Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(mirror_incidents_total[5m])",
+            "legendFormat": "Incident Rate"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Actions by Type",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (action) (mirror_actions_total)",
+            "legendFormat": "{{action}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 7,
+        "title": "Top Attacker IPs",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, count by (attacker_ip) (mirror_incidents_total))",
+            "legendFormat": "{{attacker_ip}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "Attack Types",
+        "type": "bargauge",
+        "targets": [
+          {
+            "expr": "sum by (signature) (mirror_incidents_total)",
+            "legendFormat": "{{signature}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      }
+    ],
+    "refresh": "30s",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    }
+  }
+}

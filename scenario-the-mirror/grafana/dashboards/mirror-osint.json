@@ -1,0 +1,87 @@
+{
+  "dashboard": {
+    "title": "The Mirror - OSINT Intelligence",
+    "tags": ["cyber-riposte", "the-mirror", "osint"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "OSINT Modules Success Rate",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "rate(mirror_osint_success_total[1h]) / rate(mirror_osint_lookups_total[1h])",
+            "legendFormat": "Success Rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 0.5, "color": "yellow"},
+                {"value": 0.8, "color": "green"}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "OSINT Cache Hit Rate",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "rate(mirror_osint_cache_hits_total[1h]) / rate(mirror_osint_lookups_total[1h])",
+            "legendFormat": "Cache Hit Rate"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Attacker Countries",
+        "type": "worldmap",
+        "targets": [
+          {
+            "expr": "sum by (country) (mirror_attackers_by_country)",
+            "legendFormat": "{{country}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "OSINT Module Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(mirror_osint_duration_seconds_sum[5m]) / rate(mirror_osint_duration_seconds_count[5m])",
+            "legendFormat": "Avg Duration"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Top ASNs",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, sum by (asn) (mirror_attackers_by_asn))",
+            "legendFormat": "{{asn}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      }
+    ],
+    "refresh": "1m",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    }
+  }
+}
