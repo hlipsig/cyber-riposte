@@ -244,7 +244,35 @@ def process_event(event, pool, audit, mirrored):
     execute_temp_block(attacker_ip, pool, audit, incident_id, detection)
 
     # Phase 5: Generate post-mortem for morning review
-    generate_postmortem(incident_id, attacker_ip, detection, osint_data or {}, audit)
+    github_url = generate_postmortem(incident_id, attacker_ip, detection, osint_data or {}, audit)
+
+    # Slack notification: Send real-time alert
+    try:
+        from agent.slack_notifier import get_slack_notifier
+
+        slack = get_slack_notifier()
+        if slack.enabled:
+            # Build actions list from audit log
+            actions_taken = [
+                {
+                    'name': e['action']['name'],
+                    'result': e['action']['result'],
+                    'tier': e['action'].get('tier')
+                }
+                for e in audit.entries
+                if e.get('incident_id') == incident_id
+            ]
+
+            slack.notify_incident(
+                incident_id=incident_id,
+                attacker_ip=attacker_ip,
+                detection=detection,
+                actions_taken=actions_taken,
+                osint_data=osint_data,
+                github_url=github_url
+            )
+    except Exception as e:
+        logger.warning(f"Slack notification failed: {e}")
 
     mirrored.add(attacker_ip)
     logger.info(f"=== Incident {incident_id} complete — report ready for morning review ===")

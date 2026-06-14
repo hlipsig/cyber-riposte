@@ -638,6 +638,18 @@ def generate_postmortem(incident_id, attacker_ip, detection, osint_data, audit):
             except Exception as e:
                 logger.warning(f"Failed to update incident with GitHub URL: {e}")
 
+            # Post evidence as comment
+            try:
+                from agent.github_reporter import get_github_reporter
+
+                reporter = get_github_reporter()
+                reporter.post_evidence_comment(
+                    osint_data=osint_data,
+                    evidence_files=None  # TODO: Phase 5 - add evidence file paths
+                )
+            except Exception as e:
+                logger.warning(f"Failed to post evidence comment: {e}")
+
     except Exception as e:
         logger.warning(f"Failed to create GitHub issue: {e}")
 
@@ -646,7 +658,10 @@ def generate_postmortem(incident_id, attacker_ip, detection, osint_data, audit):
         action_id="generate-postmortem",
         action_name="Generate post-mortem report",
         tier=None,
-        parameters={"output_path": str(report_file)},
+        parameters={
+            "output_path": str(report_file),
+            "github_issue_url": github_issue_url
+        },
         result="success",
         justification={
             "trigger": "incident-complete",
@@ -655,8 +670,14 @@ def generate_postmortem(incident_id, attacker_ip, detection, osint_data, audit):
             "playbook_rule": None,
             "reasoning": "All autonomous actions complete. Generating post-mortem for morning review.",
         },
-        context={"attacker_ip": attacker_ip},
+        context={
+            "attacker_ip": attacker_ip,
+            "github_issue_url": github_issue_url
+        },
     )
+
+    # Return GitHub URL for Slack notification
+    return github_issue_url
 
     # Phase 8: Generate incident report templates
     try:

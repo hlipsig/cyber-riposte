@@ -27,13 +27,13 @@ except ImportError:
 
 class GitHubReporter:
     """
-    Creates GitHub issues for incident reports.
+    Creates GitHub issues for incident reports and posts evidence as comments.
     """
-    
+
     def __init__(self, token: Optional[str] = None, repo: Optional[str] = None):
         """
         Initialize GitHub reporter.
-        
+
         Args:
             token: GitHub personal access token (or from GITHUB_TOKEN env)
             repo: Repository in format "owner/repo" (or from GITHUB_REPO env)
@@ -41,10 +41,11 @@ class GitHubReporter:
         self.token = token or os.getenv('GITHUB_TOKEN')
         self.repo = repo or os.getenv('GITHUB_REPO', 'hlipsig/cyber-riposte')
         self.api_base = 'https://api.github.com'
-        
+        self.last_issue_number = None  # Track last created issue
+
         if not self.token:
             logger.warning("GITHUB_TOKEN not set. Issue creation will be simulated.")
-        
+
         if not REQUESTS_AVAILABLE:
             logger.warning("requests library not available. Issues will not be created.")
     
@@ -99,7 +100,10 @@ class GitHubReporter:
             issue_data = response.json()
             issue_url = issue_data.get('html_url')
             issue_number = issue_data.get('number')
-            
+
+            # Store issue number for evidence comments
+            self.last_issue_number = issue_number
+
             logger.info(f"✅ Created GitHub issue #{issue_number}: {issue_url}")
             return issue_url
             
@@ -291,6 +295,112 @@ class GitHubReporter:
         simulated_url = f"https://github.com/{self.repo}/issues/SIMULATED-{incident_id}"
         logger.info(f"📝 Simulated GitHub issue: {simulated_url}")
         return simulated_url
+
+    def post_evidence_comment(
+        self,
+        issue_number: Optional[int] = None,
+        osint_data: Optional[Dict] = None,
+        evidence_files: Optional[list] = None
+    ) -> bool:
+        """
+        Post OSINT data and evidence files as a comment on the issue.
+
+        Args:
+            issue_number: GitHub issue number (uses last_issue_number if None)
+            osint_data: Raw OSINT data to attach
+            evidence_files: List of evidence file paths
+
+        Returns:
+            True if comment posted successfully
+        """
+        if not REQUESTS_AVAILABLE or not self.token:
+            logger.debug("Skipping evidence comment (GitHub not configured)")
+            return False
+
+        # Use last created issue if not specified
+        if issue_number is None:
+            issue_number = self.last_issue_number
+
+        if not issue_number:
+            logger.warning("No issue number available for evidence comment")
+            return False
+
+        try:
+            # Build evidence comment body
+            comment_body = self._build_evidence_comment(osint_data, evidence_files)
+
+            # Post comment via GitHub API
+            url = f"{self.api_base}/repos/{self.repo}/issues/{issue_number}/comments"
+            headers = {
+                'Authorization': f'token {self.token}',
+                'Accept': 'application/vnd.github.v3+json',
+            }
+            payload = {
+                'body': comment_body
+            }
+
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            logger.info(f"✅ Posted evidence comment to issue #{issue_number}")
+            return True
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to post evidence comment: {e}")
+            return False
+
+    def _build_evidence_comment(
+        self,
+        osint_data: Optional[Dict],
+        evidence_files: Optional[list]
+    ) -> str:
+        """Build evidence comment body."""
+        sections = []
+
+        sections.append("## 🔍 Additional Evidence\n")
+        sections.append("_Posted automatically by The Mirror_\n")
+
+        # Raw OSINT data
+        if osint_data:
+            sections.append("### Raw OSINT Data\n")
+            sections.append("```json")
+            sections.append(json.dumps(osint_data, indent=2, default=str))
+            sections.append("```\n")
+
+            # Extract key modules
+            modules = osint_data.get('raw_modules', {})
+            if modules:
+                sections.append("### OSINT Module Details\n")
+
+                # Shodan
+                if 'shodan' in modules and 'error' not in modules['shodan']:
+                    shodan = modules['shodan']
+                    sections.append("**Shodan:**")
+                    sections.append(f"- Banners: {len(shodan.get('banners', []))}")
+                    sections.append(f"- Hostnames: {', '.join(shodan.get('hostnames', []))[:100]}")
+                    sections.append("")
+
+                # WHOIS
+                if 'whois' in modules and 'error' not in modules['whois']:
+                    whois = modules['whois']
+                    sections.append("**WHOIS:**")
+                    sections.append(f"- Organization: {whois.get('org', 'unknown')}")
+                    sections.append(f"- Net Range: {whois.get('net_range', 'unknown')}")
+                    sections.append(f"- Registration: {whois.get('registration_date', 'unknown')}")
+                    sections.append("")
+
+        # Evidence files
+        if evidence_files:
+            sections.append("### Evidence Files\n")
+            for filepath in evidence_files:
+                sections.append(f"- `{filepath}`")
+            sections.append("")
+
+        # Footer
+        sections.append("---")
+        sections.append(f"_Generated at {datetime.now(timezone.utc).isoformat()}_")
+
+        return "\n".join(sections)
 
 
 # Global singleton
