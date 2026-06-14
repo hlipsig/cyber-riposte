@@ -55,9 +55,41 @@ logger = logging.getLogger(__name__)
 
 def _create_virtualservice(attacker_ip: str, incident_id: str, duration_hours: int = 24) -> Tuple[str, bool]:
     """
-    Phase 4: Create Istio VirtualService to redirect attacker traffic to honeypot.
+    Phase 2: Create Istio VirtualService to redirect attacker traffic to honeypot.
+
+    Uses IstioManager for dynamic VirtualService manipulation.
 
     Returns (vs_name, success).
+    """
+    try:
+        from agent.istio_manager import get_istio_manager
+
+        istio = get_istio_manager()
+
+        # Create redirect with configured honeypot
+        success = istio.create_redirect(
+            incident_id=incident_id,
+            attacker_ip=attacker_ip,
+            honeypot_host=Config.HONEYPOT_IP,
+            honeypot_port=80,
+            ttl_hours=duration_hours
+        )
+
+        vs_name = f"mirror-redirect-{incident_id.lower()}"
+        return vs_name, success
+
+    except ImportError as e:
+        logger.error(f"IstioManager not available: {e}")
+        return "", False
+    except Exception as e:
+        logger.error(f"Failed to create VirtualService via IstioManager: {e}")
+        return "", False
+
+
+def _create_virtualservice_legacy(attacker_ip: str, incident_id: str, duration_hours: int = 24) -> Tuple[str, bool]:
+    """
+    Legacy VirtualService creation (Phase 1 fallback).
+    Kept for reference, use _create_virtualservice instead.
     """
     if not K8S_AVAILABLE:
         logger.error("Kubernetes client not available. Cannot create VirtualService.")
@@ -76,7 +108,7 @@ def _create_virtualservice(attacker_ip: str, incident_id: str, duration_hours: i
 
     # VirtualService name (sanitize IP for DNS)
     vs_name = f"redirect-attacker-{attacker_ip.replace('.', '-')}"
-    namespace = "cyber-riposte"
+    namespace = "the-mirror"
 
     # VirtualService spec
     vs_spec = {
@@ -101,7 +133,7 @@ def _create_virtualservice(attacker_ip: str, incident_id: str, duration_hours: i
         },
         "spec": {
             "hosts": ["*"],
-            "gateways": ["redteam-gateway"],
+            "gateways": ["mirror-gateway"],
             "http": [
                 {
                     "match": [
@@ -117,13 +149,12 @@ def _create_virtualservice(attacker_ip: str, incident_id: str, duration_hours: i
                         {
                             "destination": {
                                 "host": Config.HONEYPOT_IP,  # honeypot-service
-                                "port": {"number": 8080}
+                                "port": {"number": 80}
                             }
                         }
                     ],
                 }
             ],
-            "priority": 10,  # Higher precedence than default (lower number = higher priority)
         },
     }
 
@@ -182,7 +213,7 @@ def execute_redirect(attacker_ip, pool, audit, incident_id, detection):
         logger.warning(f"SKIPPED {action_id}: {reason}")
         return None
 
-    # Phase 4: Try to create VirtualService
+    # Phase 2: Create Istio VirtualService redirect
     vs_name, vs_success = _create_virtualservice(attacker_ip, incident_id, duration_hours=24)
 
     if vs_success:
@@ -205,23 +236,24 @@ def execute_redirect(attacker_ip, pool, audit, incident_id, detection):
                 "detection_confidence": detection.get("confidence", 0.97),
                 "evidence_refs": [detection.get("timestamp", "")],
                 "playbook_rule": action_id,
-                "reasoning": "Recon pattern confirmed, IP not in allowlist, VirtualService created successfully",
+                "reasoning": "Recon pattern confirmed, IP not in allowlist, VirtualService created successfully via IstioManager",
             },
             context={
                 "attacker_ip": attacker_ip,
                 "honeypot_active": True,
                 "virtualservice_name": vs_name,
-                "namespace": "cyber-riposte",
+                "namespace": "the-mirror",
                 "method": "istio",
             },
             rollback_handle=vs_name,  # VirtualService name for cleanup
             expires_at=expiry,
         )
         pool.mark_executed()
+        logger.info(f"✅ Istio redirect created: {attacker_ip} → {Config.HONEYPOT_IP}")
         return True
 
-    # Fallback: Phase 1 behavior (nftables - will fail but logged)
-    logger.warning("VirtualService creation failed. Falling back to nftables (Phase 1 mode)")
+    # Fallback: Log error (no nftables fallback in Phase 2)
+    logger.error("VirtualService creation failed - Istio redirection unavailable")
 
     rule_content = (
         f"table ip nat {{\n"

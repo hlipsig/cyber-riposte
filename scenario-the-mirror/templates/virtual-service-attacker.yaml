@@ -1,0 +1,54 @@
+---
+# VirtualService Template for Attacker Redirection
+# Variables (replaced by Mirror agent):
+#   {incident_id} - Incident ID
+#   {attacker_ip} - Attacker source IP
+#   {created_at} - ISO timestamp
+#   {expires_at} - ISO timestamp
+#   {honeypot_host} - Honeypot service hostname
+#   {honeypot_port} - Honeypot service port
+
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: mirror-redirect-{incident_id}
+  namespace: the-mirror
+  labels:
+    app: the-mirror
+    component: redirect
+    managed-by: mirror-agent
+    incident-id: "{incident_id}"
+  annotations:
+    mirror.cyber-riposte.dev/attacker-ip: "{attacker_ip}"
+    mirror.cyber-riposte.dev/created-at: "{created_at}"
+    mirror.cyber-riposte.dev/expires-at: "{expires_at}"
+    mirror.cyber-riposte.dev/auto-cleanup: "true"
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - mirror-gateway
+  http:
+  # Match traffic from attacker IP and redirect to honeypot
+  - match:
+    - headers:
+        x-forwarded-for:
+          exact: "{attacker_ip}"
+    route:
+    - destination:
+        host: {honeypot_host}
+        port:
+          number: {honeypot_port}
+      weight: 100
+    headers:
+      response:
+        add:
+          x-mirror-honeypot: "true"
+          x-mirror-incident: "{incident_id}"
+          x-mirror-message: "You have been redirected to a security research environment"
+    fault:
+      # Optional: Add artificial delay to slow down attacker
+      delay:
+        percentage:
+          value: 100
+        fixedDelay: 200ms

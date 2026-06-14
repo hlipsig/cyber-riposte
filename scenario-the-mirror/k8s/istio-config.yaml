@@ -1,0 +1,235 @@
+---
+# Enable Istio sidecar injection for the-mirror namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: the-mirror
+  labels:
+    istio-injection: enabled
+
+---
+# Istio Gateway - Entry point for all traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: mirror-gateway
+  namespace: the-mirror
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: mirror-tls-cert
+    hosts:
+    - "*"
+
+---
+# Base VirtualService - Routes clean traffic to real service
+# Mirror agent will dynamically add attacker-specific routes
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: mirror-base-routes
+  namespace: the-mirror
+  labels:
+    app: the-mirror
+    managed-by: mirror-agent
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - mirror-gateway
+  http:
+  # Default route - clean traffic goes to real application
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: real-app-service
+        port:
+          number: 80
+      weight: 100
+
+---
+# DestinationRule for real application
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: real-app
+  namespace: the-mirror
+spec:
+  host: real-app-service
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+
+---
+# DestinationRule for honeypot
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: honeypot
+  namespace: the-mirror
+spec:
+  host: honeypot-service
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 1000
+      http:
+        http1MaxPendingRequests: 500
+        http2MaxRequests: 1000
+
+---
+# ServiceEntry for external honeypot (if needed)
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-honeypot
+  namespace: the-mirror
+spec:
+  hosts:
+  - honeypot.external.example.com
+  ports:
+  - number: 80
+    name: http
+    protocol: HTTP
+  - number: 443
+    name: https
+    protocol: HTTPS
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# Example: Attacker-specific VirtualService (created dynamically by Mirror agent)
+# This is a template - actual instances created per incident
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: mirror-redirect-example
+  namespace: the-mirror
+  labels:
+    app: the-mirror
+    managed-by: mirror-agent
+    incident-id: INC-20260611-1840
+  annotations:
+    mirror.cyber-riposte.dev/attacker-ip: "1.2.3.4"
+    mirror.cyber-riposte.dev/created-at: "2026-06-11T18:40:00Z"
+    mirror.cyber-riposte.dev/expires-at: "2026-06-11T19:40:00Z"
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - mirror-gateway
+  http:
+  # Route traffic from specific attacker IP to honeypot
+  - match:
+    - sourceLabels:
+        # Note: Istio uses workload identity, not source IP for sourceLabels
+        # For IP-based routing, use EnvoyFilter or headers
+        # This example shows the concept - implementation uses headers/EnvoyFilter
+        app: "attacker"
+    route:
+    - destination:
+        host: honeypot-service
+        port:
+          number: 80
+      weight: 100
+    headers:
+      response:
+        add:
+          x-mirror-honeypot: "true"
+          x-mirror-incident: "INC-20260611-1840"
+
+---
+# EnvoyFilter for IP-based routing (advanced - optional)
+# This allows true source IP matching
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: mirror-ip-redirect
+  namespace: the-mirror
+spec:
+  workloadSelector:
+    labels:
+      istio: ingressgateway
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+            subFilter:
+              name: "envoy.filters.http.router"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.lua
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+          inline_code: |
+            -- Lua script to check source IP and set routing header
+            -- Mirror agent maintains list of blocked IPs in shared state
+            function envoy_on_request(request_handle)
+              local source_ip = request_handle:headers():get("x-forwarded-for")
+              if source_ip == nil then
+                source_ip = request_handle:streamInfo():downstreamDirectRemoteAddress():ip()
+              end
+
+              -- Check if IP is in blocked list
+              -- (In production, this would check Redis or ConfigMap)
+              local blocked_ips = {
+                ["1.2.3.4"] = true,
+                ["5.6.7.8"] = true,
+              }
+
+              if blocked_ips[source_ip] then
+                request_handle:headers():add("x-mirror-redirect", "honeypot")
+                request_handle:logInfo("Redirecting attacker: " .. source_ip)
+              end
+            end
+
+---
+# ConfigMap for blocked IPs (updated dynamically by Mirror agent)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mirror-blocked-ips
+  namespace: the-mirror
+  labels:
+    app: the-mirror
+    managed-by: mirror-agent
+data:
+  blocked-ips.json: |
+    {
+      "ips": [
+        {
+          "ip": "1.2.3.4",
+          "incident_id": "INC-20260611-1840",
+          "added_at": "2026-06-11T18:40:00Z",
+          "expires_at": "2026-06-11T19:40:00Z"
+        }
+      ]
+    }
