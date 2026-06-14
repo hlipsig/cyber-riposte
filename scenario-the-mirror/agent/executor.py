@@ -535,12 +535,15 @@ def compile_dossier(attacker_ip, detection, osint_data):
     )
 
 
-def generate_postmortem(incident_id, attacker_ip, detection, osint_data, audit):
+def generate_postmortem(incident_id, attacker_ip, detection, osint_data, audit, evidence_files=None):
     """
     Generate the post-mortem report for morning review.
 
     Phase 4: Also creates GitHub issue with incident report.
+    Phase 5: Includes evidence file links.
     """
+    if evidence_files is None:
+        evidence_files = {}
     postmortem_dir = Path(Config.POSTMORTEM_DIR)
     postmortem_dir.mkdir(parents=True, exist_ok=True)
 
@@ -638,14 +641,14 @@ def generate_postmortem(incident_id, attacker_ip, detection, osint_data, audit):
             except Exception as e:
                 logger.warning(f"Failed to update incident with GitHub URL: {e}")
 
-            # Post evidence as comment
+            # Post evidence as comment (Phase 5)
             try:
                 from agent.github_reporter import get_github_reporter
 
                 reporter = get_github_reporter()
                 reporter.post_evidence_comment(
                     osint_data=osint_data,
-                    evidence_files=None  # TODO: Phase 5 - add evidence file paths
+                    evidence_files=list(evidence_files.values()) if evidence_files else None
                 )
             except Exception as e:
                 logger.warning(f"Failed to post evidence comment: {e}")

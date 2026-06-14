@@ -243,8 +243,24 @@ def process_event(event, pool, audit, mirrored):
     logger.info(f"[T1] Applying temp block on {attacker_ip}")
     execute_temp_block(attacker_ip, pool, audit, incident_id, detection)
 
-    # Phase 5: Generate post-mortem for morning review
-    github_url = generate_postmortem(incident_id, attacker_ip, detection, osint_data or {}, audit)
+    # Phase 5: Collect evidence
+    logger.info("Collecting forensic evidence...")
+    evidence_files = {}
+    try:
+        from agent.evidence_collector import collect_incident_evidence
+
+        evidence_files = collect_incident_evidence(
+            incident_id=incident_id,
+            alert_data=event,  # Original Suricata event
+            osint_data=osint_data,
+            attacker_ip=attacker_ip
+        )
+        logger.info(f"✅ Collected {len(evidence_files)} evidence files")
+    except Exception as e:
+        logger.warning(f"Evidence collection failed: {e}")
+
+    # Generate post-mortem for morning review
+    github_url = generate_postmortem(incident_id, attacker_ip, detection, osint_data or {}, audit, evidence_files)
 
     # Slack notification: Send real-time alert
     try:
